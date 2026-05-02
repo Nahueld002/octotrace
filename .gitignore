@@ -67,3 +67,6 @@ desktop.ini
 # --- Logs --------------------------------------------------------------------
 *.log
 logs/
+
+# --- JS Vendor (regenerate with curl commands in README) ---
+src/web/static/vendor/
