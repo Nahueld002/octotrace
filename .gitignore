@@ -1,0 +1,69 @@
+# =============================================================================
+# Octotrace — .gitignore
+# =============================================================================
+
+# --- Environment & Secrets ---------------------------------------------------
+.env
+.env.*
+!.env.example
+.gga
+
+# --- Python ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+wheels/
+pip-wheel-metadata/
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Type checking & linting
+.mypy_cache/
+.ruff_cache/
+.pytype/
+
+# --- Forensic Data (NEVER commit case data) ----------------------------------
+data/cases/*.sqlite
+data/cases/*.sqlite-shm
+data/cases/*.sqlite-wal
+data/input/
+
+# --- OpenCode / SDD ----------------------------------------------------------
+.atl/
+
+# --- OS ----------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+
+# --- IDE ---------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Logs --------------------------------------------------------------------
+*.log
+logs/
