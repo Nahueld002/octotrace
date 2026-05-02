@@ -8,13 +8,17 @@ description: >
 license: Apache-2.0
 metadata:
   author: octotrace
-  version: "1.0"
+  version: "1.1"
   scope: [root, providers]
   auto_invoke:
     - "Developing extraction logic for Ethereum"
     - "Modifying providers/etherscan.py"
     - "Calling or modifying Etherscan API integration"
 ---
+
+> ⚠️ **V1 DEPRECATED**: The endpoint `https://api.etherscan.io/api` is fully deprecated
+> and returns `NOTOK` for all requests. Always use `https://api.etherscan.io/v2/api`
+> with `chainid` as a required query parameter.
 
 ## When to Use
 
@@ -27,7 +31,7 @@ metadata:
 
 ### 1. ERC-20 Token Transfer Events (tokentx)
 
-**Endpoint**: `GET https://api.etherscan.io/api?module=account&action=tokentx`
+**Endpoint**: `GET https://api.etherscan.io/v2/api?module=account&action=tokentx&chainid=1`
 
 **Key params**:
 
@@ -67,7 +71,7 @@ metadata:
 
 ### 2. Address Metadata / Name Tag Lookup (getaddresstag) — PRO
 
-**Endpoint**: `GET https://api.etherscan.io/api?module=nametag&action=getaddresstag`
+**Endpoint**: `GET https://api.etherscan.io/v2/api?module=nametag&action=getaddresstag&chainid=1`
 
 **⚠ PRO endpoint**: Available exclusively on Pro Plus tier. Throttled to **2 calls/second** regardless of tier.
 
@@ -126,7 +130,7 @@ Etherscan API V2 supports 60+ EVM chains via the `chainid` parameter:
 import requests
 
 ETHERSCAN_API_KEY = "your_api_key"
-BASE_URL = "https://api.etherscan.io/api"
+BASE_URL = "https://api.etherscan.io/v2/api"
 
 # USDT on Ethereum contract address
 USDT_ERC20 = "0xdac17f958d2ee523a2206206994597c13d831ec7"
@@ -134,6 +138,7 @@ USDT_ERC20 = "0xdac17f958d2ee523a2206206994597c13d831ec7"
 params = {
     "module": "account",
     "action": "tokentx",
+    "chainid": 1,
     "contractaddress": USDT_ERC20,
     "address": "0x4e83362442b8d1bec281594cea3050c8eb01311c",
     "startblock": 0,
@@ -162,6 +167,7 @@ if data["status"] == "1":
 params = {
     "module": "nametag",
     "action": "getaddresstag",
+    "chainid": 1,
     "address": "0xa9d1e08c7793af67e9d92fe308d5697fb81d3e43",
     "apikey": ETHERSCAN_API_KEY,
 }
@@ -197,19 +203,21 @@ params = {
 ## Commands
 
 ```bash
-# Fetch USDT ERC-20 transfers (latest 5, descending)
-curl -s "https://api.etherscan.io/api?module=account&action=tokentx\
+# Fetch USDT ERC-20 transfers (latest 5, descending) — Ethereum mainnet
+curl -s "https://api.etherscan.io/v2/api?module=account&action=tokentx\
+&chainid=1\
 &contractaddress=0xdac17f958d2ee523a2206206994597c13d831ec7\
 &address=0x4e83362442b8d1bec281594cea3050c8eb01311c\
 &sort=desc&offset=5&apikey=YourApiKeyToken" | jq '.result[:3]'
 
-# Lookup address name tag (PRO endpoint)
-curl -s "https://api.etherscan.io/api?module=nametag&action=getaddresstag\
+# Lookup address name tag (PRO endpoint — requires Pro Plus tier)
+curl -s "https://api.etherscan.io/v2/api?module=nametag&action=getaddresstag\
+&chainid=1\
 &address=0xa9d1e08c7793af67e9d92fe308d5697fb81d3e43\
 &apikey=YourApiKeyToken" | jq '.result'
 
 # Fetch transfers on BSC (USDT on BSC, chainid=56)
-curl -s "https://api.etherscan.io/api?module=account&action=tokentx\
+curl -s "https://api.etherscan.io/v2/api?module=account&action=tokentx\
 &chainid=56\
 &contractaddress=0x55d398326f99059ff775485246999027b3197955\
 &address=0x...\
