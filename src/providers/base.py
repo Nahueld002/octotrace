@@ -20,13 +20,15 @@ class BaseProvider(ABC):
     CHAIN: str  # "ETH" or "TRON"
 
     @abstractmethod
-    def get_transfers(self, address: str, start_dt: str, end_dt: str) -> List[Dict]:
+    def get_transfers(
+        self, address: str, start_dt: datetime, end_dt: datetime
+    ) -> List[Dict]:
         """Fetch token transfers for an address within a date range.
 
         Args:
             address: Blockchain address to query
-            start_dt: Start datetime in ISO format (e.g., "2024-01-01T00:00:00")
-            end_dt: End datetime in ISO format (e.g., "2024-01-02T00:00:00")
+            start_dt: Start datetime (timezone-aware)
+            end_dt: End datetime (timezone-aware)
 
         Returns:
             List of normalized transfer dictionaries containing:

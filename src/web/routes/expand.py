@@ -3,6 +3,8 @@
 Handles POST /api/expand endpoint for expanding traces from an address.
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, Literal
@@ -127,9 +129,12 @@ async def expand_endpoint(request: ExpandRequest):
     
     # If not cached, fetch from provider
     provider = _get_provider(request.chain)
-    
+
     try:
-        transfers = provider.get_transfers(request.address, request.start_dt, request.end_dt)
+        # Convert ISO strings to datetime objects for the provider interface
+        start_dt = datetime.fromisoformat(request.start_dt)
+        end_dt = datetime.fromisoformat(request.end_dt)
+        transfers = provider.get_transfers(request.address, start_dt, end_dt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch transfers: {str(e)}")
     

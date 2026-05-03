@@ -3,6 +3,8 @@
 Handles POST /api/query endpoint for initiating trace queries.
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Literal, Dict, Any
@@ -149,7 +151,10 @@ async def query_endpoint(request: QueryRequest):
     else:
         # If it's an address, get transfers for that address
         try:
-            transfers = provider.get_transfers(request.input, request.start_dt, request.end_dt)
+            # Convert ISO strings to datetime objects for the provider interface
+            start_dt = datetime.fromisoformat(request.start_dt)
+            end_dt = datetime.fromisoformat(request.end_dt)
+            transfers = provider.get_transfers(request.input, start_dt, end_dt)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to fetch transfers: {str(e)}")
     

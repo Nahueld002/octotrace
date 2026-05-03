@@ -8,7 +8,7 @@ import time
 import json
 from decimal import Decimal
 from typing import Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
 import requests
 
 from src.providers.base import BaseProvider
@@ -21,19 +21,27 @@ class TronscanProvider(BaseProvider):
     CHAIN = "TRON"
     USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
     API_BASE = "https://apilist.tronscanapi.com/api"
-    
+
     def __init__(self):
         """Initialize Tronscan provider with API key from settings."""
         self.api_key = get_settings().TRONSCAN_API_KEY
         self.headers = {"TRON-PRO-API-KEY": self.api_key}
 
-    def get_transfers(self, address: str, start_dt: str, end_dt: str) -> List[Dict]:
+    def get_transfers(
+        self,
+        address: str,
+        start_dt: datetime,
+        end_dt: datetime,
+        chain: str = "tron",
+    ) -> List[Dict]:
         """Fetch token transfers for an address within a date range.
 
         Args:
             address: TRON address to query
-            start_dt: Start datetime in ISO format (e.g., "2024-01-01T00:00:00")
-            end_dt: End datetime in ISO format (e.g., "2024-01-02T00:00:00")
+            start_dt: Start datetime (timezone-aware)
+            end_dt: End datetime (timezone-aware)
+            chain: Chain identifier (default: "tron"). Currently only
+                TRON mainnet is supported.
 
         Returns:
             List of normalized transfer dictionaries
@@ -42,44 +50,44 @@ class TronscanProvider(BaseProvider):
             requests.RequestException: If API call fails
         """
         try:
-            # Convert datetime strings to timestamps in milliseconds
-            start_timestamp = int(datetime.fromisoformat(start_dt.replace('Z', '+00:00')).timestamp() * 1000)
-            end_timestamp = int(datetime.fromisoformat(end_dt.replace('Z', '+00:00')).timestamp() * 1000)
-            
+            # Convert datetime objects to timestamps in milliseconds
+            # The API accepts timestamps and already filters by range
+            start_timestamp = int(start_dt.timestamp() * 1000)
+            end_timestamp = int(end_dt.timestamp() * 1000)
+
             # Prepare API parameters
             params = {
                 "relatedAddress": address,
                 "start_timestamp": start_timestamp,
                 "end_timestamp": end_timestamp,
-                "limit": 50  # Limit to prevent overwhelming responses
+                "limit": 50,
             }
-            
+
             # Make API request
             response = requests.get(
-                f"{self.API_BASE}/token_trc20/transfers", 
-                params=params, 
+                f"{self.API_BASE}/token_trc20/transfers",
+                params=params,
                 headers=self.headers,
-                timeout=30
+                timeout=30,
             )
             response.raise_for_status()
-            
+
             data = response.json()
-            
-            # Process transfers
+
+            # Extract contractInfo at response level (dict keyed by address)
+            contract_info = data.get("contractInfo", {})
+
+            # Process transfers — API already filters by timestamps,
+            # so no redundant secondary filter needed
             transfers = []
-            for transfer in data.get('data', []):
-                # Convert timestamp to datetime for filtering
-                timestamp = int(transfer.get('timestamp', 0))
-                transfer_datetime = datetime.utcfromtimestamp(timestamp / 1000).isoformat()
-                
-                # Filter by date range
-                if start_dt <= transfer_datetime <= end_dt:
-                    # Normalize the transfer data
-                    normalized = self._normalize_tronscan_transfer(transfer)
-                    transfers.append(normalized)
-            
+            for transfer in data.get("token_transfers", []):
+                normalized = self._normalize_tronscan_transfer(
+                    transfer, contract_info
+                )
+                transfers.append(normalized)
+
             return transfers
-            
+
         except requests.RequestException:
             # Return empty list on network failure
             return []
@@ -102,28 +110,31 @@ class TronscanProvider(BaseProvider):
         """
         try:
             # Prepare API parameters
-            params = {
-                "hash": txid
-            }
-            
+            params = {"hash": txid}
+
             # Make API request
             response = requests.get(
-                f"{self.API_BASE}/transaction-info", 
-                params=params, 
+                f"{self.API_BASE}/transaction-info",
+                params=params,
                 headers=self.headers,
-                timeout=30
+                timeout=30,
             )
             response.raise_for_status()
-            
+
             data = response.json()
-            
+
             # Check if transaction was found
-            if not data.get('success', False):
+            if not data.get("success", False):
                 raise ValueError("Transaction not found")
-            
+
+            # Extract contractInfo at response level
+            contract_info = data.get("contractInfo", {})
+
             # Normalize the transfer data
-            return self._normalize_tronscan_transfer(data.get('data', {}))
-            
+            return self._normalize_tronscan_transfer(
+                data.get("data", {}), contract_info
+            )
+
         except requests.RequestException:
             raise
         except Exception:
@@ -146,53 +157,79 @@ class TronscanProvider(BaseProvider):
         """
         # Tronscan address tagging is not available in the current API
         # We raise NotImplementedError as noted in requirements
-        raise NotImplementedError("Tronscan address tagging is not implemented in this version")
+        raise NotImplementedError(
+            "Tronscan address tagging is not implemented in this version"
+        )
 
-    def _normalize_tronscan_transfer(self, raw_data: Dict) -> Dict:
+    def _normalize_tronscan_transfer(
+        self, raw_data: Dict, contract_info: Dict = None
+    ) -> Dict:
         """Normalize Tronscan API response data into standardized transfer format.
 
         Args:
             raw_data: Raw data from Tronscan API response
+            contract_info: Contract info map keyed by address, used to
+                resolve address labels (tag1). Extracted from response-level
+                `contractInfo` field.
 
         Returns:
             Normalized transfer dictionary
         """
+        if contract_info is None:
+            contract_info = {}
+
         # Extract token info
-        token_info = raw_data.get('tokenInfo', {})
-        quant = raw_data.get('quant', 0)
-        token_decimal = token_info.get('tokenDecimal', 6)
-        
+        token_info = raw_data.get("tokenInfo", {})
+        quant = raw_data.get("quant", 0)
+        token_decimal = token_info.get("tokenDecimal", 6)
+
         # Calculate amount with proper decimal precision
-        amount = Decimal(quant) / Decimal(10 ** token_decimal)
+        amount = Decimal(str(quant)) / Decimal(10 ** token_decimal)
         amount = amount.quantize(Decimal("0.000001"))
-        
-        # Extract tags from contractInfo if available
-        contract_info = raw_data.get('contractInfo', {})
-        tag_from = contract_info.get('tag1') if contract_info else None
-        tag_to = contract_info.get('tag2') if contract_info else None
-        
+
+        # Resolve addresses for contractInfo lookup
+        from_addr = raw_data.get("fromAddress", "")
+        to_addr = raw_data.get("toAddress", "")
+
+        # Extract tags from contractInfo — it's a dict keyed by address,
+        # each entry has a 'tag1' field (e.g., "Binance-Cold 2")
+        tag_from = (
+            contract_info.get(from_addr, {}).get("tag1")
+            if contract_info
+            else None
+        )
+        tag_to = (
+            contract_info.get(to_addr, {}).get("tag1")
+            if contract_info
+            else None
+        )
+
         # Build transaction URL
-        tx_url = f"https://tronscan.org/#/transaction/{raw_data.get('hash', '')}"
-        
+        tx_url = (
+            f"https://tronscan.org/#/transaction/{raw_data.get('hash', '')}"
+        )
+
         # Normalize the transfer data
         transfer = {
-            "txid": raw_data.get('hash', ''),
+            "txid": raw_data.get("hash", ""),
             "chain": self.CHAIN,
-            "from_address": raw_data.get('fromAddress', ''),
-            "to_address": raw_data.get('toAddress', ''),
-            'amount': str(amount),
-            "datetime_utc": datetime.utcfromtimestamp(int(raw_data.get('timestamp', 0)) / 1000).isoformat(),
-            "token_symbol": token_info.get('tokenName', 'USDT'),
-            "block_number": int(raw_data.get('blockNumber', 0)),
-            "confirmations": int(raw_data.get('confirmations', 0)),
+            "from_address": from_addr,
+            "to_address": to_addr,
+            "amount": str(amount),
+            "datetime_utc": datetime.utcfromtimestamp(
+                int(raw_data.get("timestamp", 0)) / 1000
+            ).isoformat(),
+            "token_symbol": token_info.get("tokenName", "USDT"),
+            "block_number": int(raw_data.get("blockNumber", 0)),
+            "confirmations": int(raw_data.get("confirmations", 0)),
             "tag_from": tag_from,
             "tag_to": tag_to,
             "service_from": None,
             "service_to": None,
             "url_tx": tx_url,
-            "raw_json": json.dumps(raw_data)
+            "raw_json": json.dumps(raw_data),
         }
-        
+
         return transfer
 
     def _build_tx_url(self, txid: str) -> str:
