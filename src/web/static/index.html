@@ -3,10 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Octotrace - USDT Traceability</title>
+    <title>Octotrace</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <h1>Octotrace - USDT Traceability Tool</h1>
-    <p>This is a placeholder for the main application page.</p>
+    <div id="input-bar">
+        <input type="text" id="address-input" placeholder="Enter wallet address or TX ID">
+        <select id="chain-select">
+            <option value="ETH">Ethereum</option>
+            <option value="TRON">Tron</option>
+        </select>
+        <input type="date" id="date-from">
+        <input type="date" id="date-to">
+        <button id="search-btn">Search</button>
+    </div>
+    
+    <div id="graph-container"></div>
+    
+    <div id="side-panel">
+        <button id="panel-close">✕</button>
+        <div id="panel-content"></div>
+        <button id="panel-save">Save</button>
+    </div>
+
+    <!-- Vendor libraries (CDN order matters) -->
+    <script src="/static/vendor/cytoscape.min.js"></script>
+    <script src="/static/vendor/dagre.min.js"></script>
+    <script src="/static/vendor/cytoscape-dagre.min.js"></script>
+    
+    <!-- Application modules (order matters) -->
+    <script src="/static/app.js"></script>
+    <script src="/static/graph.js"></script>
+    <script src="/static/panel.js"></script>
 </body>
 </html>
