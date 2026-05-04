@@ -1,6 +1,7 @@
 """Query route for Octotrace API.
 
-Handles POST /api/query endpoint for initiating trace queries.
+Handles POST /api/query endpoint for initiating trace queries
+and GET /api/node/{address} for fetching address transactions.
 """
 
 from datetime import datetime
@@ -28,6 +29,7 @@ class QueryRequest(BaseModel):
     chain: Literal["ETH", "TRON"]
     start_dt: str
     end_dt: str
+    min_amount: str = "1"
 
 def _classify_input(input_str: str) -> str:
     """Classify input as either address or transaction ID.
@@ -48,15 +50,42 @@ def _classify_input(input_str: str) -> str:
         # Default to address for now
         return "address"
 
-def _transfer_to_elements(transfers: list) -> Dict[str, Any]:
+def _build_label(address: str, tag: str | None) -> str:
+    """Build a display label for a graph node from address and optional tag.
+
+    Args:
+        address: Full wallet address.
+        tag: Public nametag from API, or None.
+
+    Returns:
+        Display label — the tag if present, otherwise a truncated address.
+    """
+    if tag:
+        return tag
+    return f"{address[:6]}...{address[-4:]}"
+
+
+def _transfer_to_elements(transfers: list, min_amount: str = "1") -> Dict[str, Any]:
     """Convert list of transfers to graph elements format.
-    
+
     Args:
         transfers: List of normalized transfer dictionaries
-        
+        min_amount: Minimum amount filter as Decimal string (default "1").
+            Transfers below this threshold are excluded.
+
     Returns:
         Dictionary with nodes and edges in graph format
     """
+    min_amt = Decimal(min_amount)
+    # Filter out transfers with empty critical fields that would
+    # cause Cytoscape to reject element creation, and apply
+    # minimum amount threshold
+    transfers = [
+        t for t in transfers
+        if t.get('from_address') and t.get('to_address') and t.get('txid')
+        and Decimal(t.get('amount', '0')) >= min_amt
+    ]
+
     nodes = {}
     edges = []
     
@@ -67,7 +96,7 @@ def _transfer_to_elements(transfers: list) -> Dict[str, Any]:
             nodes[from_addr] = {
                 "data": {
                     "id": from_addr,
-                    "label": transfer.get('tag_from', from_addr[:6] + '...' + from_addr[-4:]),
+                    "label": _build_label(from_addr, transfer.get('tag_from')),
                     "tag": transfer.get('tag_from'),
                     "service": transfer.get('service_from'),
                     "chain": transfer['chain']
@@ -80,7 +109,7 @@ def _transfer_to_elements(transfers: list) -> Dict[str, Any]:
             nodes[to_addr] = {
                 "data": {
                     "id": to_addr,
-                    "label": transfer.get('tag_to', to_addr[:6] + '...' + to_addr[-4:]),
+                    "label": _build_label(to_addr, transfer.get('tag_to')),
                     "tag": transfer.get('tag_to'),
                     "service": transfer.get('service_to'),
                     "chain": transfer['chain']
@@ -142,10 +171,18 @@ async def query_endpoint(request: QueryRequest):
     
     # Fetch transfers based on input type
     if input_type == "txid":
-        # If it's a transaction ID, get the specific transaction
+        # Etherscan V2 does not support direct txhash lookup on the tokentx
+        # endpoint without a known address. The provider raises
+        # NotImplementedError. Return an empty graph with an informative
+        # message instead of a HTTP 500.
         try:
             tx_data = provider.get_transaction(request.input)
             transfers = [tx_data] if tx_data else []
+        except NotImplementedError:
+            return {
+                "elements": {"nodes": [], "edges": []},
+                "message": "TXID lookup requires known address. Use address search and expand from there."
+            }
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to fetch transaction: {str(e)}")
     else:
@@ -159,6 +196,31 @@ async def query_endpoint(request: QueryRequest):
             raise HTTPException(status_code=500, detail=f"Failed to fetch transfers: {str(e)}")
     
     # Convert to graph elements
-    elements = _transfer_to_elements(transfers)
+    elements = _transfer_to_elements(transfers, request.min_amount)
     
     return {"elements": elements}
+
+
+@router.get("/node/{address}")
+async def get_node_transactions(
+    address: str,
+    chain: str,
+    start_dt: str,
+    end_dt: str,
+):
+    """Retorna todas las transacciones de una address para mostrar en el panel.
+
+    Args:
+        address: Wallet address to query
+        chain: Blockchain identifier ("ETH" or "TRON")
+        start_dt: Start datetime in ISO format
+        end_dt: End datetime in ISO format
+
+    Returns:
+        Dictionary with address and its transfers list
+    """
+    provider = _get_provider(chain.upper())
+    start = datetime.fromisoformat(start_dt)
+    end = datetime.fromisoformat(end_dt)
+    transfers = provider.get_transfers(address, start, end)
+    return {"address": address, "transfers": transfers}

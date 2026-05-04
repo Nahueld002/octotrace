@@ -2,10 +2,8 @@
  * Side panel module for Octotrace.
  * This module owns ALL DOM manipulation for the side panel.
  * It MUST NOT contain any fetch calls or cy.* calls.
+ * For saves, it emits CustomEvents — app.js handles the fetch.
  */
-
-// Import the cytoscape-js skill for reference:
-// https://github.com/octotrace/octotrace/blob/main/skills/cytoscape-js/SKILL.md
 
 // Private state
 PanelModule = {
@@ -96,16 +94,117 @@ PanelModule.show = function(data) {
     linkContainer.className = 'panel-field';
     linkContainer.appendChild(evidenceLink);
     content.appendChild(linkContainer);
+    
+    // Add loading indicator for transfers table
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'panel-field';
+    loadingDiv.id = 'panel-transfers-loading';
+    loadingDiv.textContent = 'Loading transactions...';
+    content.appendChild(loadingDiv);
   }
   
   // Show panel
   panel.classList.add('open');
   
-  // Wire save button
-  document.getElementById('panel-save').onclick = () => this.save(data);
-  
   // Wire close button
   document.getElementById('panel-close').onclick = () => this.hide();
+};
+
+/**
+ * Render transaction table for a node in the panel.
+ * Called by app.js after fetching transfer data.
+ *
+ * @param {Array} transfers - List of normalized transfer dictionaries
+ */
+PanelModule.renderTransfers = function(transfers) {
+  // Remove loading indicator
+  const loadingEl = document.getElementById('panel-transfers-loading');
+  if (loadingEl) loadingEl.remove();
+
+  const content = document.getElementById('panel-content');
+
+  // Section header
+  const header = document.createElement('h4');
+  header.textContent = `Transactions (${transfers.length})`;
+  content.appendChild(header);
+
+  // Build table
+  const table = document.createElement('table');
+  table.className = 'panel-transactions-table';
+
+  // Header row
+  const thead = document.createElement('thead');
+  thead.innerHTML = `
+    <tr>
+      <th>Date</th>
+      <th>Amount</th>
+      <th>From</th>
+      <th>To</th>
+      <th>TXID</th>
+      <th>Tag</th>
+      <th></th>
+    </tr>
+  `;
+  table.appendChild(thead);
+
+  // Data rows
+  const tbody = document.createElement('tbody');
+  transfers.forEach(tx => {
+    const row = document.createElement('tr');
+
+    // Date
+    const dateCell = document.createElement('td');
+    dateCell.textContent = tx.datetime_utc ? tx.datetime_utc.slice(0, 10) : '';
+    row.appendChild(dateCell);
+
+    // Amount
+    const amtCell = document.createElement('td');
+    amtCell.textContent = tx.amount || '0';
+    row.appendChild(amtCell);
+
+    // From
+    const fromCell = document.createElement('td');
+    fromCell.title = tx.from_address || '';
+    fromCell.textContent = tx.from_address ? tx.from_address.slice(0, 12) + '...' : '';
+    row.appendChild(fromCell);
+
+    // To
+    const toCell = document.createElement('td');
+    toCell.title = tx.to_address || '';
+    toCell.textContent = tx.to_address ? tx.to_address.slice(0, 12) + '...' : '';
+    row.appendChild(toCell);
+
+    // TXID (first 12 chars)
+    const txidCell = document.createElement('td');
+    const txidLink = document.createElement('a');
+    txidLink.href = tx.url_tx || '#';
+    txidLink.target = '_blank';
+    txidLink.textContent = tx.txid ? tx.txid.slice(0, 12) + '...' : '';
+    txidCell.appendChild(txidLink);
+    row.appendChild(txidCell);
+
+    // Tag
+    const tagCell = document.createElement('td');
+    tagCell.textContent = tx.tag_to || tx.tag_from || '';
+    row.appendChild(tagCell);
+
+    // Save button
+    const saveCell = document.createElement('td');
+    const saveBtn = document.createElement('button');
+    saveBtn.textContent = '\u{1F4BE}';
+    saveBtn.title = 'Save transaction';
+    saveBtn.className = 'save-tx-btn';
+    saveBtn.onclick = () => {
+      // Emit event — app.js handles the fetch
+      document.dispatchEvent(new CustomEvent('save:tx', { detail: tx }));
+    };
+    saveCell.appendChild(saveBtn);
+    row.appendChild(saveCell);
+
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody);
+  content.appendChild(table);
 };
 
 /**
@@ -116,37 +215,4 @@ PanelModule.hide = function() {
   panel.classList.remove('open');
   document.getElementById('panel-content').innerHTML = '';
   this._currentType = null;
-};
-
-/**
- * Save data (node or edge)
- * @param {Object} data - Node or edge data to save
- */
-PanelModule.save = function(data) {
-  const isEdge = data.hasOwnProperty('source');
-  const endpoint = isEdge ? '/api/save/tx' : '/api/save/address';
-  
-  fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      id: data.id,
-      chain: data.chain
-    })
-  })
-  .then(response => {
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return response.json();
-  })
-  .then(result => {
-    alert(isEdge ? 'Transaction saved successfully!' : 'Address saved successfully!');
-  })
-  .catch(error => {
-    console.error('Error saving:', error);
-    alert('Error saving: ' + error.message);
-  });
 };

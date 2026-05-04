@@ -187,40 +187,54 @@ class TronscanProvider(BaseProvider):
         amount = Decimal(str(quant)) / Decimal(10 ** token_decimal)
         amount = amount.quantize(Decimal("0.000001"))
 
-        # Resolve addresses for contractInfo lookup
-        from_addr = raw_data.get("fromAddress", "")
-        to_addr = raw_data.get("toAddress", "")
+        # Resolve addresses with fallback — API uses snake_case fields
+        # but different endpoints (e.g., /transaction-info) use camelCase
+        txid = raw_data.get("transaction_id") or raw_data.get("hash", "")
+        from_addr = raw_data.get("from_address") or raw_data.get("fromAddress", "")
+        to_addr = raw_data.get("to_address") or raw_data.get("toAddress", "")
 
-        # Extract tags from contractInfo — it's a dict keyed by address,
-        # each entry has a 'tag1' field (e.g., "Binance-Cold 2")
-        tag_from = (
+        # Extract tags — API may provide them directly in the transfer
+        # as nested dicts (e.g., {"from_address_tag": "Binance-Hot 9"})
+        # or via contractInfo map keyed by address
+        raw_from_tag = raw_data.get("from_address_tag")
+        if isinstance(raw_from_tag, dict):
+            tag_from = raw_from_tag.get("from_address_tag")
+        else:
+            tag_from = raw_from_tag
+        tag_from = tag_from or (
             contract_info.get(from_addr, {}).get("tag1")
             if contract_info
             else None
         )
-        tag_to = (
+
+        raw_to_tag = raw_data.get("to_address_tag")
+        if isinstance(raw_to_tag, dict):
+            tag_to = raw_to_tag.get("to_address_tag")
+        else:
+            tag_to = raw_to_tag
+        tag_to = tag_to or (
             contract_info.get(to_addr, {}).get("tag1")
             if contract_info
             else None
         )
 
         # Build transaction URL
-        tx_url = (
-            f"https://tronscan.org/#/transaction/{raw_data.get('hash', '')}"
-        )
+        tx_url = f"https://tronscan.org/#/transaction/{txid}"
+
+        # Determine timestamp — block_ts from token_trc20/transfers,
+        # timestamp from transaction-info endpoint (both in milliseconds)
+        ts_ms = int(raw_data.get("block_ts") or raw_data.get("timestamp", 0))
 
         # Normalize the transfer data
         transfer = {
-            "txid": raw_data.get("hash", ""),
+            "txid": txid,
             "chain": self.CHAIN,
             "from_address": from_addr,
             "to_address": to_addr,
             "amount": str(amount),
-            "datetime_utc": datetime.utcfromtimestamp(
-                int(raw_data.get("timestamp", 0)) / 1000
-            ).isoformat(),
+            "datetime_utc": datetime.utcfromtimestamp(ts_ms / 1000).isoformat(),
             "token_symbol": token_info.get("tokenName", "USDT"),
-            "block_number": int(raw_data.get("blockNumber", 0)),
+            "block_number": int(raw_data.get("block") or raw_data.get("blockNumber", 0)),
             "confirmations": int(raw_data.get("confirmations", 0)),
             "tag_from": tag_from,
             "tag_to": tag_to,

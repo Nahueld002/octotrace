@@ -8,6 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, Literal
+from decimal import Decimal
 import json
 
 from src.db import get_connection, is_cached
@@ -27,16 +28,44 @@ class ExpandRequest(BaseModel):
     chain: Literal["ETH", "TRON"]
     start_dt: str
     end_dt: str
+    min_amount: str = "1"
 
-def _transfer_to_elements(transfers: list) -> Dict[str, Any]:
+def _build_label(address: str, tag: str | None) -> str:
+    """Build a display label for a graph node from address and optional tag.
+
+    Args:
+        address: Full wallet address.
+        tag: Public nametag from API, or None.
+
+    Returns:
+        Display label — the tag if present, otherwise a truncated address.
+    """
+    if tag:
+        return tag
+    return f"{address[:6]}...{address[-4:]}"
+
+
+def _transfer_to_elements(transfers: list, min_amount: str = "1") -> Dict[str, Any]:
     """Convert list of transfers to graph elements format.
     
     Args:
         transfers: List of normalized transfer dictionaries
+        min_amount: Minimum amount filter as Decimal string (default "1").
+            Transfers below this threshold are excluded.
         
     Returns:
         Dictionary with nodes and edges in graph format
     """
+    min_amt = Decimal(min_amount)
+    # Filter out transfers with empty critical fields that would
+    # cause Cytoscape to reject element creation, and apply
+    # minimum amount threshold
+    transfers = [
+        t for t in transfers
+        if t.get('from_address') and t.get('to_address') and t.get('txid')
+        and Decimal(t.get('amount', '0')) >= min_amt
+    ]
+
     nodes = {}
     edges = []
     
@@ -47,7 +76,7 @@ def _transfer_to_elements(transfers: list) -> Dict[str, Any]:
             nodes[from_addr] = {
                 "data": {
                     "id": from_addr,
-                    "label": transfer.get('tag_from', from_addr[:6] + '...' + from_addr[-4:]),
+                    "label": _build_label(from_addr, transfer.get('tag_from')),
                     "tag": transfer.get('tag_from'),
                     "service": transfer.get('service_from'),
                     "chain": transfer['chain']
@@ -60,7 +89,7 @@ def _transfer_to_elements(transfers: list) -> Dict[str, Any]:
             nodes[to_addr] = {
                 "data": {
                     "id": to_addr,
-                    "label": transfer.get('tag_to', to_addr[:6] + '...' + to_addr[-4:]),
+                    "label": _build_label(to_addr, transfer.get('tag_to')),
                     "tag": transfer.get('tag_to'),
                     "service": transfer.get('service_to'),
                     "chain": transfer['chain']
@@ -139,6 +168,6 @@ async def expand_endpoint(request: ExpandRequest):
         raise HTTPException(status_code=500, detail=f"Failed to fetch transfers: {str(e)}")
     
     # Convert to graph elements
-    elements = _transfer_to_elements(transfers)
+    elements = _transfer_to_elements(transfers, request.min_amount)
     
     return {"elements": elements, "cached": False}

@@ -81,23 +81,26 @@ document.addEventListener('node:selected', (e) => {
 
 ## Initialization Pattern
 
-**Critical**: Cytoscape's `ready` callback fires synchronously during the
-constructor. Always assign `cy` before calling any setup functions.
+**Critical**: Cytoscape's `ready` callback fires **synchronously during the
+constructor**. This means you CANNOT use `.on('ready', ...)` after the
+constructor — it will never fire because the event already happened.
 
 ```javascript
 // graph.js
 
-// WRONG — TDZ bug: setup() runs before cy is assigned
-const cy = cytoscape({ ready: () => setup(cy) });  // ❌
+// WRONG — two patterns that DON'T work:
+const cy = cytoscape({ ready: () => setup(cy) });  // ❌ TDZ: cy is undefined here
+const cy = cytoscape({ ... });
+cy.on('ready', () => setupEvents(cy));              // ❌ ready already fired
 
-// CORRECT — assign first, then configure
+// CORRECT — assign first, then call setup directly
 const cy = cytoscape({
   container: document.getElementById('graph-container'),
   elements: [],
   style: GRAPH_STYLES,
   layout: { name: 'preset' },
 });
-cy.on('ready', () => setupEvents(cy));  // ✓
+setupEvents(cy);  // ✓ cy is assigned, ready already fired during constructor
 ```
 
 ---
@@ -312,7 +315,8 @@ function buildNodeLabel(address, tag, service) {
 | Bug | Wrong | Correct |
 |-----|-------|---------|
 | Invalid arrow shape | `'triangle-back'` | `'triangle'` |
-| TDZ in constructor | `const cy = cytoscape({ ready: () => setup(cy) })` | Assign `cy` first, then call `cy.on('ready', ...)` |
+| TDZ in constructor | `const cy = cytoscape({ ready: () => setup(cy) })` | Assign `cy` first, then call `setupEvents(cy)` directly — `ready` already fired |
+| .on('ready', ...) after constructor | `cy.on('ready', () => setup(cy))` | Call setup directly: `setupEvents(cy)` — ready fires synchronously inside constructor |
 | Destroying graph on new data | `cy.destroy()` + reinit | `cy.add()` with dedup |
 | Migrating to React Flow | — | **Never. Cytoscape.js is the final choice.** |
 

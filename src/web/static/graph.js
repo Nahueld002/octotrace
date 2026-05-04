@@ -55,6 +55,15 @@ const GRAPH_STYLES = [
     },
   },
   {
+    // Expanded node — dashed orange border as visual indicator
+    selector: 'node.expanded',
+    style: {
+      'border-color': '#f5a623',
+      'border-width': '4px',
+      'border-style': 'dashed',
+    },
+  },
+  {
     selector: 'edge',
     style: {
       'width': 2,
@@ -90,7 +99,6 @@ const DAGRE_LAYOUT = {
 };
 
 // Initialize Cytoscape instance
-// CRITICAL: Assign cy first, then call cy.on('ready', ...) for events
 const cy = cytoscape({
   container: document.getElementById('graph-container'),
   elements: [],
@@ -98,10 +106,9 @@ const cy = cytoscape({
   layout: { name: 'preset' },
 });
 
-// Setup events after cy is initialized
-cy.on('ready', () => {
-  setupEvents(cy);
-});
+// Ready event fires DURING constructor above — calling .on('ready', ...) after
+// would never trigger. Call setup directly instead.
+setupEvents(cy);
 
 /**
  * Setup all event handlers for the Cytoscape instance
@@ -122,8 +129,9 @@ function setupEvents(cy) {
     }));
   });
 
-  // Double click on node → expand
+  // Double click on node → expand + visual indicator
   cy.on('dbltap', 'node', (evt) => {
+    evt.target.addClass('expanded');
     document.dispatchEvent(new CustomEvent('node:expand', {
       detail: { id: evt.target.id(), data: evt.target.data() }
     }));

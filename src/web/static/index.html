@@ -15,6 +15,9 @@
         </select>
         <input type="date" id="date-from">
         <input type="date" id="date-to">
+        <input type="number" id="min-amount" value="1" min="0" step="0.01" 
+               style="width:80px" title="Monto mínimo USDT">
+        <label for="min-amount">min USDT</label>
         <button id="search-btn">Search</button>
     </div>
     
@@ -23,7 +26,6 @@
     <div id="side-panel">
         <button id="panel-close">✕</button>
         <div id="panel-content"></div>
-        <button id="panel-save">Save</button>
     </div>
 
     <!-- Vendor libraries (CDN order matters) -->

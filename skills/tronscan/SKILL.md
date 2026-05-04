@@ -50,6 +50,7 @@ metadata:
 |-------|------|-------------|
 | `transaction_id` | string | Transaction hash |
 | `block_ts` | int | Block timestamp (milliseconds) |
+| `block` | int | Block number |
 | `from_address` | string | Sender address |
 | `to_address` | string | Recipient address |
 | `contract_address` | string | TRC20 token contract address |
@@ -57,12 +58,42 @@ metadata:
 | `confirmed` | bool | Confirmation status |
 | `finalResult` | string | `"SUCCESS"` or error |
 | `revert` | bool | Whether transaction reverted |
+| `from_address_tag` | dict | Address tag as nested dict: `{"from_address_tag": "Binance-Hot 9", "from_address_tag_logo": ""}` |
+| `to_address_tag` | dict | Address tag as nested dict: `{"to_address_tag": "..." | ""}` |
 | `tokenInfo.tokenId` | string | Token contract address |
 | `tokenInfo.tokenAbbr` | string | Token symbol (e.g. `"USDT"`) |
 | `tokenInfo.tokenName` | string | Token name (e.g. `"Tether USD"`) |
 | `tokenInfo.tokenDecimal` | int | Decimal places (`6` for USDT on TRON) |
 
 **Amount conversion**: `actual_value = int(quant) / (10 ** tokenInfo.tokenDecimal)`
+
+### ⚠️ Field Name Compatibility Pattern
+
+The `token_trc20/transfers` endpoint uses **snake_case** field names, while the
+`transaction-info` endpoint uses **camelCase**. When normalizing, use the
+`get("new") or get("old")` pattern for forward/backward compatibility:
+
+```python
+txid = raw_data.get("transaction_id") or raw_data.get("hash", "")
+from_addr = raw_data.get("from_address") or raw_data.get("fromAddress", "")
+to_addr = raw_data.get("to_address") or raw_data.get("toAddress", "")
+ts_ms = int(raw_data.get("block_ts") or raw_data.get("timestamp", 0))
+block_number = int(raw_data.get("block") or raw_data.get("blockNumber", 0))
+```
+
+**Address tags** in `token_trc20/transfers` are **nested dicts**, not strings:
+
+```python
+raw_from_tag = raw_data.get("from_address_tag")
+if isinstance(raw_from_tag, dict):
+    tag_from = raw_from_tag.get("from_address_tag")
+else:
+    tag_from = raw_from_tag
+```
+
+Fallback: the response-level `contractInfo` map (keyed by address, each entry
+has `tag1`, `tag1Url`, `name`, `vip`) is also available but the per-transfer
+`from_address_tag` / `to_address_tag` fields are the preferred primary source.
 
 ### 2. Account TRC20 Transfer History (with direction filtering)
 
