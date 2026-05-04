@@ -168,7 +168,7 @@ function handleNodeSelected(eventDetail) {
     })
     .then(data => {
       if (data.transfers) {
-        PanelModule.renderTransfers(data.transfers);
+        PanelModule.renderTransfers(data.transfers, eventDetail.id);
       }
     })
     .catch(error => {
@@ -236,6 +236,12 @@ function initApp() {
   // Listen for save events from panel.js
   document.addEventListener('save:tx', (e) => {
     handleSaveTx(e.detail);
+  });
+
+  // Clear button — removes all elements from graph and closes panel
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    GraphModule.clear();
+    PanelModule.hide();
   });
 }
 

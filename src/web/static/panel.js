@@ -115,8 +115,9 @@ PanelModule.show = function(data) {
  * Called by app.js after fetching transfer data.
  *
  * @param {Array} transfers - List of normalized transfer dictionaries
+ * @param {string} focalAddress - The address clicked (to determine IN/OUT)
  */
-PanelModule.renderTransfers = function(transfers) {
+PanelModule.renderTransfers = function(transfers, focalAddress) {
   // Remove loading indicator
   const loadingEl = document.getElementById('panel-transfers-loading');
   if (loadingEl) loadingEl.remove();
@@ -136,6 +137,7 @@ PanelModule.renderTransfers = function(transfers) {
   const thead = document.createElement('thead');
   thead.innerHTML = `
     <tr>
+      <th>Type</th>
       <th>Date</th>
       <th>Amount</th>
       <th>From</th>
@@ -151,6 +153,19 @@ PanelModule.renderTransfers = function(transfers) {
   const tbody = document.createElement('tbody');
   transfers.forEach(tx => {
     const row = document.createElement('tr');
+
+    // Type badge (IN / OUT / SELF)
+    const typeCell = document.createElement('td');
+    const isFrom = tx.from_address === focalAddress;
+    const isTo = tx.to_address === focalAddress;
+    if (isFrom && isTo) {
+      typeCell.innerHTML = '<span class="badge-self">↔ SELF</span>';
+    } else if (isTo) {
+      typeCell.innerHTML = '<span class="badge-in">▼ IN</span>';
+    } else {
+      typeCell.innerHTML = '<span class="badge-out">▲ OUT</span>';
+    }
+    row.appendChild(typeCell);
 
     // Date
     const dateCell = document.createElement('td');
@@ -195,7 +210,6 @@ PanelModule.renderTransfers = function(transfers) {
     saveBtn.title = 'Save transaction';
     saveBtn.className = 'save-tx-btn';
     saveBtn.onclick = () => {
-      // Emit event — app.js handles the fetch
       document.dispatchEvent(new CustomEvent('save:tx', { detail: tx }));
     };
     saveCell.appendChild(saveBtn);

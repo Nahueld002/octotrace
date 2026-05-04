@@ -14,7 +14,9 @@ Key Functions:
 Forensic Constraints:
     - raw_json is NOT NULL in transactions — original API response preserved.
     - amount stored as TEXT (Decimal string) — never float.
-    - All writes use INSERT OR IGNORE — never UPDATE or DELETE.
+    - Transactions use INSERT ... ON CONFLICT DO UPDATE — updates only
+      confirmations, tags, and raw_json; saved_at is preserved.
+    - Addresses use INSERT ... ON CONFLICT DO UPDATE with times_seen counter.
     - Read-only queries use immutable URI mode.
 
 Example:
@@ -172,10 +174,12 @@ def save_transaction(
     tx: dict,
     raw_response: dict,
 ) -> None:
-    """Persist a normalized transaction with its original API payload.
+    """Persist or update a normalized transaction with its original API payload.
 
-    Uses INSERT OR IGNORE to enforce append-only semantics — if the txid
-    already exists, the row is silently skipped.
+    Uses INSERT ... ON CONFLICT DO UPDATE to support upsert semantics.
+    On conflict, updates confirmations, block_number, tags, and raw_json
+    to reflect latest provider data. saved_at is NOT touched — the first
+    save timestamp is preserved.
 
     Args:
         conn: Active sqlite3 connection from get_connection().
@@ -185,14 +189,10 @@ def save_transaction(
             tag_from, tag_to, service_from, service_to, url_tx.
         raw_response: Original dict returned by the provider API. Will be
             serialized to JSON string for raw_json field.
-
-    Raises:
-        sqlite3.IntegrityError: If unique constraint on txid is violated
-            by a concurrent insert (should not occur with OR IGNORE).
     """
     conn.execute(
         """
-        INSERT OR IGNORE INTO transactions
+        INSERT INTO transactions
             (txid, chain, from_address, to_address, amount,
              datetime_utc, token_symbol, block_number, confirmations,
              tag_from, tag_to, service_from, service_to,
@@ -202,6 +202,14 @@ def save_transaction(
              :datetime_utc, :token_symbol, :block_number, :confirmations,
              :tag_from, :tag_to, :service_from, :service_to,
              :url_tx, :raw_json)
+        ON CONFLICT(txid) DO UPDATE SET
+            confirmations = excluded.confirmations,
+            block_number  = excluded.block_number,
+            tag_from      = COALESCE(excluded.tag_from, transactions.tag_from),
+            tag_to        = COALESCE(excluded.tag_to, transactions.tag_to),
+            service_from  = COALESCE(excluded.service_from, transactions.service_from),
+            service_to    = COALESCE(excluded.service_to, transactions.service_to),
+            raw_json      = excluded.raw_json
         """,
         {**tx, "raw_json": json.dumps(raw_response)},
     )

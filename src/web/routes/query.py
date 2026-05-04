@@ -86,11 +86,28 @@ def _transfer_to_elements(transfers: list, min_amount: str = "1") -> Dict[str, A
         and Decimal(t.get('amount', '0')) >= min_amt
     ]
 
-    nodes = {}
+    # Collect all unique addresses to check saved status in DB
+    all_addresses = set()
+    for t in transfers:
+        if t.get('from_address'):
+            all_addresses.add(t['from_address'])
+        if t.get('to_address'):
+            all_addresses.add(t['to_address'])
+
+    saved_set: set = set()
+    if all_addresses:
+        placeholders = ','.join('?' * len(all_addresses))
+        with get_connection(read_only=True) as conn:
+            rows = conn.execute(
+                f"SELECT address FROM addresses WHERE address IN ({placeholders})",
+                list(all_addresses),
+            ).fetchall()
+            saved_set = {r[0] for r in rows}
+
+    nodes: Dict[str, Any] = {}
     edges = []
-    
+
     for transfer in transfers:
-        # Create node for from_address if not exists
         from_addr = transfer['from_address']
         if from_addr not in nodes:
             nodes[from_addr] = {
@@ -99,11 +116,12 @@ def _transfer_to_elements(transfers: list, min_amount: str = "1") -> Dict[str, A
                     "label": _build_label(from_addr, transfer.get('tag_from')),
                     "tag": transfer.get('tag_from'),
                     "service": transfer.get('service_from'),
-                    "chain": transfer['chain']
+                    "chain": transfer['chain'],
+                    "saved": from_addr in saved_set,
+                    "is_service": bool(transfer.get('service_from')),
                 }
             }
-        
-        # Create node for to_address if not exists  
+
         to_addr = transfer['to_address']
         if to_addr not in nodes:
             nodes[to_addr] = {
@@ -112,11 +130,12 @@ def _transfer_to_elements(transfers: list, min_amount: str = "1") -> Dict[str, A
                     "label": _build_label(to_addr, transfer.get('tag_to')),
                     "tag": transfer.get('tag_to'),
                     "service": transfer.get('service_to'),
-                    "chain": transfer['chain']
+                    "chain": transfer['chain'],
+                    "saved": to_addr in saved_set,
+                    "is_service": bool(transfer.get('service_to')),
                 }
             }
-        
-        # Create edge for this transfer
+
         edge = {
             "data": {
                 "id": transfer['txid'],
@@ -128,7 +147,7 @@ def _transfer_to_elements(transfers: list, min_amount: str = "1") -> Dict[str, A
             }
         }
         edges.append(edge)
-    
+
     return {
         "nodes": list(nodes.values()),
         "edges": edges

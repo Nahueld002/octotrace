@@ -6,19 +6,19 @@
 // Import the cytoscape-js skill for reference:
 // https://github.com/octotrace/octotrace/blob/main/skills/cytoscape-js/SKILL.md
 
-// Dark theme colors
-const BACKGROUND_COLOR = '#1a1a2e';
-const NODE_FILL_COLOR = '#16213e';
-const NODE_BORDER_COLOR = '#0f3460';
+// Dark theme base colors
 const EDGE_COLOR = '#0f3460';
-const ACCENT_COLOR = '#e94560';
 
-// Graph styles following the cytoscape-js skill guidelines
+// Graph styles — forensic color palette
+// Order matters for selector specificity in Cytoscape.
 const GRAPH_STYLES = [
   {
+    // Default node — gray, rectangle
     selector: 'node',
     style: {
-      'background-color': NODE_FILL_COLOR,
+      'background-color': '#4a4a6a',
+      'border-color': '#2a2a4a',
+      'border-width': '2px',
       'label': 'data(label)',
       'color': '#ffffff',
       'font-size': '11px',
@@ -26,36 +26,30 @@ const GRAPH_STYLES = [
       'text-margin-y': '6px',
       'width': '40px',
       'height': '40px',
-      'border-width': '2px',
-      'border-color': NODE_BORDER_COLOR,
-    },
-  },
-  {
-    // Exchange / known service nodes
-    selector: 'node[service]',
-    style: {
-      'background-color': ACCENT_COLOR,
-      'border-color': '#b8344a',
       'shape': 'rectangle',
     },
   },
   {
-    // Node with public tag but not a known service
-    selector: 'node[tag]',
+    // Saved in DB — green fill
+    selector: 'node[?saved]',
     style: {
       'background-color': '#2d8a4e',
+      'border-color': '#1e6438',
     },
   },
   {
-    // Selected node
-    selector: 'node:selected',
+    // Known exchange/service — orange, diamond, bigger
+    selector: 'node[?is_service]',
     style: {
-      'border-color': ACCENT_COLOR,
-      'border-width': '3px',
+      'background-color': '#e94560',
+      'border-color': '#b8344a',
+      'shape': 'diamond',
+      'width': '50px',
+      'height': '50px',
     },
   },
   {
-    // Expanded node — dashed orange border as visual indicator
+    // Expanded node — dashed yellow border (overrides border-color and width)
     selector: 'node.expanded',
     style: {
       'border-color': '#f5a623',
@@ -64,12 +58,23 @@ const GRAPH_STYLES = [
     },
   },
   {
+    // Selected node — white border, enlarged
+    selector: 'node:selected',
+    style: {
+      'border-color': '#ffffff',
+      'border-width': '3px',
+      'border-style': 'solid',
+      'width': '52px',
+      'height': '52px',
+    },
+  },
+  {
     selector: 'edge',
     style: {
       'width': 2,
       'line-color': EDGE_COLOR,
       'target-arrow-color': EDGE_COLOR,
-      'target-arrow-shape': 'triangle',   // ✓ valid — do NOT use 'triangle-back'
+      'target-arrow-shape': 'triangle',
       'curve-style': 'bezier',
       'label': 'data(amount)',
       'font-size': '10px',
@@ -80,8 +85,8 @@ const GRAPH_STYLES = [
   {
     selector: 'edge:selected',
     style: {
-      'line-color': ACCENT_COLOR,
-      'target-arrow-color': ACCENT_COLOR,
+      'line-color': '#f5a623',
+      'target-arrow-color': '#f5a623',
       'width': 3,
     },
   },
@@ -196,5 +201,13 @@ function buildNodeLabel(address, tag, service) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+/**
+ * Clear all elements from the graph.
+ * Called by the Clear button in app.js — search and expand never call this.
+ */
+function clear() {
+    cy.elements().remove();
+}
+
 // Export the module
-window.GraphModule = { addElements, buildNodeLabel, cy };
+window.GraphModule = { addElements, buildNodeLabel, clear };
