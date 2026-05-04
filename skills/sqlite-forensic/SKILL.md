@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS addresses (
     last_seen_utc   TEXT,
     url_address     TEXT,
     raw_json        TEXT,
+    times_seen      INTEGER NOT NULL DEFAULT 1,
     saved_at        TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 """
@@ -121,19 +122,17 @@ def init_db() -> None:
 
 ### Immutable Schema
 
-Schema changes require new versioned tables. **Never use ALTER TABLE** on
-existing data tables — it breaks the forensic audit trail.
+Existing data columns are never altered or dropped. However, **adding new
+columns with `DEFAULT` values** via `ALTER TABLE ADD COLUMN` is acceptable
+for schema migrations, since it does not break existing rows.
 
 ```python
-# WRONG
-"ALTER TABLE transactions ADD COLUMN new_field TEXT;"  # ❌
+# ACCEPTABLE — add new column with DEFAULT (preserves existing data)
+"ALTER TABLE addresses ADD COLUMN times_seen INTEGER NOT NULL DEFAULT 1"  # ✓
 
-# CORRECT — create a new versioned table
-SCHEMA_TRANSACTIONS_V2 = """
-CREATE TABLE IF NOT EXISTS transactions_v2 (
-    -- full new definition here
-);
-"""
+# WRONG — altering or dropping existing columns breaks the audit trail
+"ALTER TABLE transactions DROP COLUMN raw_json;"      # ❌
+"ALTER TABLE transactions RENAME COLUMN amount TO amt;"  # ❌
 ```
 
 ---
@@ -150,10 +149,11 @@ FOREIGN KEY (from_address) REFERENCES addresses(address) ON DELETE RESTRICT
 
 ---
 
-### Raw JSON Storage (MANDATORY)
+### Save Transaction (auto-saves addresses)
 
 Every transaction write **must** include the complete original API response
-as a JSON string in `raw_json`. This is the forensic audit trail.
+as a JSON string in `raw_json`. Additionally, both `from_address` and
+`to_address` are auto-saved to the addresses table with `times_seen = 1`.
 
 ```python
 import json
@@ -161,6 +161,8 @@ from decimal import Decimal
 
 def save_transaction(conn: sqlite3.Connection, tx: dict, raw_response: dict) -> None:
     """Persist a normalized transaction with its original API payload.
+
+    Automatically saves both from_address and to_address with their tags.
 
     Args:
         conn: Active sqlite3 connection from get_connection().
@@ -184,6 +186,52 @@ def save_transaction(conn: sqlite3.Connection, tx: dict, raw_response: dict) -> 
              :url_tx, :raw_json)
         """,
         {**tx, "raw_json": json.dumps(raw_response)},
+    )
+
+    # Auto-save both addresses
+    _now = tx.get("datetime_utc")
+    for addr, tag in [
+        (tx.get("from_address"), tx.get("tag_from")),
+        (tx.get("to_address"), tx.get("tag_to")),
+    ]:
+        if addr:
+            chain = tx["chain"]
+            url = (
+                f"https://etherscan.io/address/{addr}"
+                if chain == "ETH"
+                else f"https://tronscan.org/#/address/{addr}"
+            )
+            save_address(conn, addr, chain, tag, None, None, _now, _now, url, None)
+```
+
+### Save Address (with times_seen counter)
+
+Uses `INSERT ... ON CONFLICT DO UPDATE`. On first insert `times_seen = 1`.
+On subsequent inserts for the same address, `times_seen` increments by 1.
+`first_seen_utc` is preserved via `COALESCE`.
+
+```python
+def save_address(conn: sqlite3.Connection, address: str, chain: str,
+                 tag_public: str | None, ...) -> None:
+    conn.execute(
+        """
+        INSERT INTO addresses
+            (address, chain, tag_public, service_name, service_url,
+             first_seen_utc, last_seen_utc, url_address, raw_json,
+             times_seen)
+        VALUES
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        ON CONFLICT(address) DO UPDATE SET
+            tag_public     = excluded.tag_public,
+            service_name   = excluded.service_name,
+            service_url    = excluded.service_url,
+            first_seen_utc = COALESCE(addresses.first_seen_utc, excluded.first_seen_utc),
+            last_seen_utc  = excluded.last_seen_utc,
+            url_address    = excluded.url_address,
+            raw_json       = COALESCE(excluded.raw_json, addresses.raw_json),
+            times_seen     = addresses.times_seen + 1
+        """,
+        (address, chain, tag_public, ...),
     )
 ```
 

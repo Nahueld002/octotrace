@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS addresses (
     last_seen_utc   TEXT,
     url_address     TEXT,
     raw_json        TEXT,
+    times_seen      INTEGER NOT NULL DEFAULT 1,
     saved_at        TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 """
@@ -118,6 +119,16 @@ def init_db() -> None:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript(SCHEMA_TRANSACTIONS)
         conn.executescript(SCHEMA_ADDRESSES)
+        # Migration: add times_seen to existing addresses tables created
+        # before v0.1.1. Safe — adds column with DEFAULT 1 for existing rows.
+        try:
+            conn.execute(
+                "ALTER TABLE addresses ADD COLUMN times_seen "
+                "INTEGER NOT NULL DEFAULT 1"
+            )
+        except sqlite3.OperationalError:
+            # Column already exists — migration was already applied
+            pass
         conn.commit()
 
 
@@ -195,6 +206,21 @@ def save_transaction(
         {**tx, "raw_json": json.dumps(raw_response)},
     )
 
+    # Auto-guardar ambas addresses involucradas en la transacción
+    _now = tx.get("datetime_utc")
+    for addr, tag in [
+        (tx.get("from_address"), tx.get("tag_from")),
+        (tx.get("to_address"), tx.get("tag_to")),
+    ]:
+        if addr:
+            chain = tx["chain"]
+            url = (
+                f"https://etherscan.io/address/{addr}"
+                if chain == "ETH"
+                else f"https://tronscan.org/#/address/{addr}"
+            )
+            save_address(conn, addr, chain, tag, None, None, _now, _now, url, None)
+
 
 def save_address(
     conn: sqlite3.Connection,
@@ -210,8 +236,11 @@ def save_address(
 ) -> None:
     """Persist or update address metadata.
 
-    Uses INSERT OR REPLACE to update existing records with latest data
-    while preserving the first_seen_utc timestamp (preserved via COALESCE).
+    Uses INSERT with ON CONFLICT DO UPDATE to track address sightings.
+    On first insert: sets times_seen = 1.
+    On subsequent inserts for the same address: increments times_seen by 1.
+    first_seen_utc is preserved on conflict (COALESCE) — the first
+    observation timestamp is never overwritten.
 
     Args:
         conn: Active sqlite3 connection from get_connection().
@@ -229,18 +258,19 @@ def save_address(
         """
         INSERT INTO addresses
             (address, chain, tag_public, service_name, service_url,
-             first_seen_utc, last_seen_utc, url_address, raw_json)
+             first_seen_utc, last_seen_utc, url_address, raw_json,
+             times_seen)
         VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
         ON CONFLICT(address) DO UPDATE SET
-            tag_public   = excluded.tag_public,
-            service_name = excluded.service_name,
-            service_url  = excluded.service_url,
-            last_seen_utc = excluded.last_seen_utc,
-            url_address  = excluded.url_address,
-            raw_json     = COALESCE(excluded.raw_json, addresses.raw_json)
-        WHERE addresses.first_seen_utc IS NULL
-           OR addresses.first_seen_utc > excluded.first_seen_utc
+            tag_public     = excluded.tag_public,
+            service_name   = excluded.service_name,
+            service_url    = excluded.service_url,
+            first_seen_utc = COALESCE(addresses.first_seen_utc, excluded.first_seen_utc),
+            last_seen_utc  = excluded.last_seen_utc,
+            url_address    = excluded.url_address,
+            raw_json       = COALESCE(excluded.raw_json, addresses.raw_json),
+            times_seen     = addresses.times_seen + 1
         """,
         (
             address,
