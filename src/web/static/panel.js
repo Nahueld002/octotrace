@@ -25,7 +25,6 @@ PanelModule.show = function(data) {
   // Clear previous content
   content.innerHTML = '';
   
-  // Build content based on type
   if (isEdge) {
     // Edge data
     const edgeFields = [
@@ -52,7 +51,7 @@ PanelModule.show = function(data) {
     
     // Add evidence link
     const evidenceLink = document.createElement('a');
-    evidenceLink.href = `https://${data.chain === 'ETH' ? 'etherscan.io' : 'tronscan.org'}/tx/${data.id}`;
+    evidenceLink.href = `https://${data.chain === 'ETH' ? 'etherscan.io/tx/' + data.id : 'tronscan.org/#/transaction/' + data.id}`;
     evidenceLink.textContent = 'View on Blockchain Explorer';
     evidenceLink.target = '_blank';
     
@@ -61,12 +60,11 @@ PanelModule.show = function(data) {
     linkContainer.appendChild(evidenceLink);
     content.appendChild(linkContainer);
   } else {
-    // Node data
+    // Node data — show tag or label if tag is null
     const nodeFields = [
       { label: 'Address', value: data.id },
-      { label: 'Chain', value: data.chain },
-      { label: 'Service', value: data.service || 'Unknown' },
-      { label: 'Tag', value: data.tag || 'None' }
+      { label: 'Tag', value: data.tag || data.label || 'None' },
+      { label: 'Chain', value: data.chain || '—' }
     ];
     
     nodeFields.forEach(field => {
@@ -86,7 +84,7 @@ PanelModule.show = function(data) {
     
     // Add evidence link
     const evidenceLink = document.createElement('a');
-    evidenceLink.href = `https://${data.chain === 'ETH' ? 'etherscan.io' : 'tronscan.org'}/address/${data.id}`;
+    evidenceLink.href = `https://${data.chain === 'ETH' ? 'etherscan.io/address/' + data.id : 'tronscan.org/#/address/' + data.id}`;
     evidenceLink.textContent = 'View on Blockchain Explorer';
     evidenceLink.target = '_blank';
     
@@ -180,21 +178,21 @@ PanelModule.renderTransfers = function(transfers, focalAddress) {
     // From
     const fromCell = document.createElement('td');
     fromCell.title = tx.from_address || '';
-    fromCell.textContent = tx.from_address ? tx.from_address.slice(0, 12) + '...' : '';
+    fromCell.textContent = tx.from_address || '';
     row.appendChild(fromCell);
 
     // To
     const toCell = document.createElement('td');
     toCell.title = tx.to_address || '';
-    toCell.textContent = tx.to_address ? tx.to_address.slice(0, 12) + '...' : '';
+    toCell.textContent = tx.to_address || '';
     row.appendChild(toCell);
 
-    // TXID (first 12 chars)
+    // TXID
     const txidCell = document.createElement('td');
     const txidLink = document.createElement('a');
     txidLink.href = tx.url_tx || '#';
     txidLink.target = '_blank';
-    txidLink.textContent = tx.txid ? tx.txid.slice(0, 12) + '...' : '';
+    txidLink.textContent = tx.txid || '';
     txidCell.appendChild(txidLink);
     row.appendChild(txidCell);
 
@@ -230,3 +228,109 @@ PanelModule.hide = function() {
   document.getElementById('panel-content').innerHTML = '';
   this._currentType = null;
 };
+
+/**
+ * Show edge data in panel (no fetch needed — data comes from graph)
+ * @param {Object} edgeData - Edge data from graph event
+ */
+PanelModule.showEdge = function(edgeData) {
+  const panel = document.getElementById('side-panel');
+  const content = document.getElementById('panel-content');
+  content.innerHTML = '';
+
+  const chain = edgeData.chain;
+  const txUrl = chain === 'ETH'
+    ? `https://etherscan.io/tx/${edgeData.id}`
+    : `https://tronscan.org/#/transaction/${edgeData.id}`;
+
+  const fields = [
+    { label: 'Transaction ID', value: edgeData.id },
+    { label: 'Amount',         value: edgeData.amount },
+    { label: 'Date',           value: edgeData.datetime },
+    { label: 'Chain',          value: chain },
+    { label: 'From',           value: edgeData.source },
+    { label: 'To',             value: edgeData.target },
+  ];
+
+  fields.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'panel-field';
+    div.innerHTML = `<label>${f.label}</label><div>${f.value || '—'}</div>`;
+    content.appendChild(div);
+  });
+
+  const linkDiv = document.createElement('div');
+  linkDiv.className = 'panel-field';
+  linkDiv.innerHTML = `<a href="${txUrl}" target="_blank">View on Blockchain Explorer</a>`;
+  content.appendChild(linkDiv);
+
+  // Save button (create dynamically — no static #panel-save in HTML)
+  const saveBtn = document.createElement('button');
+  saveBtn.id = 'panel-save';
+  saveBtn.textContent = '\u{1F4BE} Save transaction';
+  saveBtn.onclick = () => {
+    document.dispatchEvent(new CustomEvent('save:tx', {
+      detail: {
+        txid: edgeData.id,
+        chain: edgeData.chain,
+        from_address: edgeData.source,
+        to_address: edgeData.target,
+        amount: edgeData.amount,
+        datetime_utc: edgeData.datetime,
+        token_symbol: 'USDT',
+        block_number: null,
+        confirmations: null,
+        tag_from: null,
+        tag_to: null,
+        url_tx: edgeData.chain === 'ETH'
+          ? `https://etherscan.io/tx/${edgeData.id}`
+          : `https://tronscan.org/#/transaction/${edgeData.id}`,
+        raw_json: '{}'
+      }
+    }));
+  };
+  content.appendChild(saveBtn);
+
+  // Close button
+  document.getElementById('panel-close').onclick = () => PanelModule.hide();
+
+  panel.classList.add('open');
+};
+
+/**
+ * Show loading state in panel
+ * @param {Object} nodeData - Node data (unused, for API consistency)
+ */
+PanelModule.showLoading = function(nodeData) {
+  const panel = document.getElementById('side-panel');
+  const content = document.getElementById('panel-content');
+  content.innerHTML = '<div class="panel-loading">Cargando transacciones...</div>';
+  panel.classList.add('open');
+};
+
+/**
+ * Show error message in panel
+ * @param {string} msg - Error message to display
+ */
+PanelModule.showError = function(msg) {
+  document.getElementById('panel-content').innerHTML =
+    `<div class="panel-error">Error: ${msg}</div>`;
+};
+
+// Panel resize via drag handle — replaces CSS resize/direction rtl
+document.addEventListener('DOMContentLoaded', () => {
+  const handle = document.getElementById('panel-resize-handle');
+  if (!handle) return;
+
+  handle.addEventListener('mousedown', () => {
+    const onMove = (e) => {
+      const newWidth = window.innerWidth - e.clientX;
+      const panel = document.getElementById('side-panel');
+      panel.style.width = Math.max(320, Math.min(newWidth, window.innerWidth * 0.8)) + 'px';
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', () => {
+      document.removeEventListener('mousemove', onMove);
+    }, { once: true });
+  });
+});

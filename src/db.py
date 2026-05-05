@@ -173,6 +173,7 @@ def save_transaction(
     conn: sqlite3.Connection,
     tx: dict,
     raw_response: dict,
+    is_new_tx: bool = True,
 ) -> None:
     """Persist or update a normalized transaction with its original API payload.
 
@@ -227,7 +228,8 @@ def save_transaction(
                 if chain == "ETH"
                 else f"https://tronscan.org/#/address/{addr}"
             )
-            save_address(conn, addr, chain, tag, None, None, _now, _now, url, None)
+            save_address(conn, addr, chain, tag, None, None, _now, _now, url, None,
+                         increment_seen=is_new_tx)
 
 
 def save_address(
@@ -241,6 +243,7 @@ def save_address(
     last_seen_utc: str | None,
     url_address: str | None,
     raw_json: dict | None,
+    increment_seen: bool = True,
 ) -> None:
     """Persist or update address metadata.
 
@@ -278,7 +281,7 @@ def save_address(
             last_seen_utc  = excluded.last_seen_utc,
             url_address    = excluded.url_address,
             raw_json       = COALESCE(excluded.raw_json, addresses.raw_json),
-            times_seen     = addresses.times_seen + 1
+            times_seen     = addresses.times_seen + (CASE WHEN ? THEN 1 ELSE 0 END)
         """,
         (
             address,
@@ -290,5 +293,6 @@ def save_address(
             last_seen_utc,
             url_address,
             json.dumps(raw_json) if raw_json else None,
+            1 if increment_seen else 0,
         ),
     )

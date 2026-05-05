@@ -15,16 +15,16 @@ Use these skills for detailed patterns and domain-specific knowledge on-demand.
 ### Generic Skills (Technology)
 | Skill | Description | URL |
 | :--- | :--- | :--- |
-| **python-forensics** | Strict use of `decimal.Decimal`, type hinting, and professional docstrings. | `skills/python-forensics/SKILL.md` |
-| **sqlite-forensic** | Referential integrity, `raw_json` storage, and immutable schema patterns. | `skills/sqlite-forensic/SKILL.md` |
-| **cytoscape-js** | Cytoscape.js graph rendering, event handling, and layout configuration patterns. | `skills/cytoscape-js/SKILL.md` |
+| **python-forensics** | Strict use of `decimal.Decimal`, type hinting, and professional docstrings. | `.opencode/skills/python-forensics/SKILL.md` |
+| **sqlite-forensic** | Referential integrity, `raw_json` storage, and immutable schema patterns. | `.opencode/skills/sqlite-forensic/SKILL.md` |
+| **cytoscape-js** | Cytoscape.js graph rendering, event handling, and layout configuration patterns. | `.opencode/skills/cytoscape-js/SKILL.md` |
 
 ### Project-Specific Skills (Octotrace Core)
 | Skill | Description | URL |
 | :--- | :--- | :--- |
-| **blockchain-trace** | TRON (TRC20) and EVM (ERC20) logic, hash parsing, and normalization. | `skills/trace/SKILL.md` |
-| **etherscan** | Etherscan API: ERC-20 token transfers (`tokentx`) and address metadata (`getaddresstag`) for exchange detection. | `skills/etherscan/SKILL.md` |
-| **tronscan** | Tronscan API: TRC-20 token transfers, transaction info, and address label extraction. | `skills/tronscan/SKILL.md` |
+| **blockchain-trace** | TRON (TRC20) and EVM (ERC20) logic, hash parsing, and normalization. | `.opencode/skills/trace/SKILL.md` |
+| **etherscan** | Etherscan API: ERC-20 token transfers (`tokentx`) and address metadata (`getaddresstag`) for exchange detection. | `.opencode/skills/etherscan/SKILL.md` |
+| **tronscan** | Tronscan API: TRC-20 token transfers, transaction info, and address label extraction. | `.opencode/skills/tronscan/SKILL.md` |
 
 ---
 

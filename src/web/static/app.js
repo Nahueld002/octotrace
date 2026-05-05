@@ -144,13 +144,22 @@ function handleNodeExpand(eventDetail) {
   });
 }
 
+// AbortController for node selection — cancel stale fetches
+let nodeSelectController = null;
+
 /**
  * Handle node selected — fetch transfers for panel display
  * @param {Object} eventDetail - Event detail with node data
  */
 function handleNodeSelected(eventDetail) {
+  // Cancel previous fetch if still pending
+  if (nodeSelectController) {
+    nodeSelectController.abort();
+  }
+  nodeSelectController = new AbortController();
+
   // First show basic node info in panel
-  PanelModule.show(eventDetail);
+  PanelModule.show(eventDetail.data); // anteriormente como `PanelModule.show(eventDetail);`
 
   const nodeId = eventDetail.id;
   const nodeData = eventDetail.data;
@@ -161,7 +170,9 @@ function handleNodeSelected(eventDetail) {
   if (!startDt || !endDt || !nodeId) return;
 
   // Fetch transfer data for this node to populate the table
-  fetch(`/api/node/${encodeURIComponent(nodeId)}?chain=${encodeURIComponent(chain)}&start_dt=${encodeURIComponent(startDt)}&end_dt=${encodeURIComponent(endDt)}`)
+  fetch(`/api/node/${encodeURIComponent(nodeId)}?chain=${encodeURIComponent(chain)}&start_dt=${encodeURIComponent(startDt)}&end_dt=${encodeURIComponent(endDt)}`, {
+      signal: nodeSelectController.signal
+    })
     .then(response => {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return response.json();
@@ -172,7 +183,9 @@ function handleNodeSelected(eventDetail) {
       }
     })
     .catch(error => {
+      if (error.name === 'AbortError') return; // fetch cancelled — ignore
       console.error('Error fetching node transactions:', error);
+      PanelModule.showError(error.message);
     });
 }
 
@@ -205,7 +218,17 @@ function handleSaveTx(tx) {
     })
   })
   .then(r => r.json())
-  .then(() => alert('Transaction saved'))
+  .then(result => {
+    // Mark the edge as saved in the graph — immediate visual feedback
+    GraphModule.markSaved(tx.txid);
+    GraphModule.markSaved(tx.from_address);
+    GraphModule.markSaved(tx.to_address);
+    if (result.already_existed) {
+      alert('⚠️ Esta transacción ya estaba guardada. Los datos fueron actualizados.');
+    } else {
+      alert('✅ Transacción guardada correctamente.');
+    }
+  })
   .catch(err => alert('Error: ' + err.message));
 }
 
@@ -222,7 +245,7 @@ function initApp() {
   });
   
   document.addEventListener('edge:selected', (e) => {
-    PanelModule.show(e.detail);
+    PanelModule.showEdge(e.detail.data);
   });
   
   document.addEventListener('node:expand', (e) => {

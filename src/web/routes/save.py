@@ -92,10 +92,18 @@ async def save_transaction_endpoint(request: SaveTxRequest):
         
         # Save the transaction
         with get_connection() as conn:
-            save_transaction(conn, request.tx.dict(), raw_response)
+            # Check if transaction already existed before upsert
+            existing = conn.execute(
+                "SELECT id FROM transactions WHERE txid = ?", 
+                (request.tx.txid,)
+            ).fetchone()
+            already_existed = existing is not None
+            
+            save_transaction(conn, request.tx.dict(), raw_response,
+                             is_new_tx=not already_existed)
             conn.commit()
         
-        return {"status": "success"}
+        return {"status": "success", "already_existed": already_existed}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save transaction: {str(e)}")
 

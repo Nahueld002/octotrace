@@ -1,10 +1,10 @@
 # Sub-agent: Web
 
 > **Skills Reference**:
-> - [cytoscape-js](../../../skills/cytoscape/SKILL.md)
-> - [python-forensics](../../../skills/python/SKILL.md)
-> - [sqlite-forensic](../../../skills/db/SKILL.md)
-> - [blockchain-trace](../../../skills/trace/SKILL.md)
+> - [cytoscape-js](../../../.opencode/skills/cytoscape-js/SKILL.md)
+> - [python-forensics](../../../.opencode/skills/python-forensics/SKILL.md)
+> - [sqlite-forensic](../../../.opencode/skills/sqlite-forensic/SKILL.md)
+> - [blockchain-trace](../../../.opencode/skills/trace/SKILL.md)
 
 ### Auto-invoke Skills
 

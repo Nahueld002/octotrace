@@ -1,9 +1,9 @@
 # Sub-agent: Services
 
 > **Skills Reference**:
-> - [sqlite-forensic](../../../skills/db/SKILL.md)
-> - [python-forensics](../../../skills/python/SKILL.md)
-> - [blockchain-trace](../../../skills/trace/SKILL.md)
+> - [sqlite-forensic](../../../.opencode/skills/sqlite-forensic/SKILL.md)
+> - [python-forensics](../../../.opencode/skills/python-forensics/SKILL.md)
+> - [blockchain-trace](../../../.opencode/skills/trace/SKILL.md)
 
 ### Auto-invoke Skills
 

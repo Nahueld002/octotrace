@@ -1,10 +1,10 @@
 # Sub-agent: Providers
 
 > **Skills Reference**:
-> - [etherscan-api](../../../skills/etherscan/SKILL.md)
-> - [tronscan-api](../../../skills/tronscan/SKILL.md)
-> - [blockchain-trace](../../../skills/trace/SKILL.md)
-> - [python-forensics](../../../skills/python/SKILL.md)
+> - [etherscan-api](../../../.opencode/skills/etherscan/SKILL.md)
+> - [tronscan-api](../../../.opencode/skills/tronscan/SKILL.md)
+> - [blockchain-trace](../../../.opencode/skills/trace/SKILL.md)
+> - [python-forensics](../../../.opencode/skills/python-forensics/SKILL.md)
 
 ### Auto-invoke Skills
 

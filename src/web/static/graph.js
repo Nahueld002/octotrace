@@ -83,6 +83,15 @@ const GRAPH_STYLES = [
     },
   },
   {
+    // Saved edge — green line
+    selector: 'edge[?saved]',
+    style: {
+      'line-color': '#2d8a4e',
+      'target-arrow-color': '#2d8a4e',
+      'width': 3,
+    },
+  },
+  {
     selector: 'edge:selected',
     style: {
       'line-color': '#f5a623',
@@ -113,6 +122,7 @@ const cy = cytoscape({
 
 // Ready event fires DURING constructor above — calling .on('ready', ...) after
 // would never trigger. Call setup directly instead.
+let lastExpandedId = null;
 setupEvents(cy);
 
 /**
@@ -120,8 +130,21 @@ setupEvents(cy);
  * @param {Object} cy - Cytoscape instance
  */
 function setupEvents(cy) {
+  // Prevent tap from firing on dbltap — debounce same-target rapid clicks
+  let lastTapTime = 0;
+  let lastTapTarget = null;
+
   // Single click on node → panel lateral
   cy.on('tap', 'node', (evt) => {
+    const now = Date.now();
+    const isSameTarget = lastTapTarget === evt.target.id();
+    const isDoubleTap = (now - lastTapTime) < 400;
+
+    lastTapTime = now;
+    lastTapTarget = evt.target.id();
+
+    if (isSameTarget && isDoubleTap) return; // ignore — this is a dbltap
+
     document.dispatchEvent(new CustomEvent('node:selected', {
       detail: { id: evt.target.id(), data: evt.target.data() }
     }));
@@ -137,6 +160,7 @@ function setupEvents(cy) {
   // Double click on node → expand + visual indicator
   cy.on('dbltap', 'node', (evt) => {
     evt.target.addClass('expanded');
+    lastExpandedId = evt.target.id();
     document.dispatchEvent(new CustomEvent('node:expand', {
       detail: { id: evt.target.id(), data: evt.target.data() }
     }));
@@ -147,6 +171,13 @@ function setupEvents(cy) {
     if (evt.target === cy) {
       document.dispatchEvent(new CustomEvent('graph:deselect'));
     }
+  });
+
+  // Listen for save events from app.js — mark element as saved
+  document.addEventListener('graph:mark-saved', (e) => {
+    const { id } = e.detail;
+    const el = cy.getElementById(id);
+    if (el.length) el.data('saved', true);
   });
 }
 
@@ -171,20 +202,27 @@ function addElements(nodes, edges) {
 }
 
 /**
- * Run layout only on new elements to avoid repositioning existing nodes
- * @param {Array} newNodeIds - Array of new node IDs to layout
+ * Run layout on new elements without repositioning existing nodes.
+ * Locks existing nodes in place before running dagre on the full graph,
+ * then unlocks them after layout completes.
+ * @param {Array} newNodeIds - Array of new element IDs to layout around
  */
 function expandLayout(newNodeIds) {
-  const subset = cy.elements().filter((el) =>
-    newNodeIds.includes(el.id()) || el.neighborhood().some(
-      (n) => newNodeIds.includes(n.id())
-    )
-  );
-  subset.layout({
+  // Freeze existing nodes in place — but keep the expanded node locked too
+  cy.nodes().forEach((node) => {
+    if (!newNodeIds.includes(node.id()) || node.id() === lastExpandedId) {
+      node.lock();
+    }
+  });
+
+  cy.layout({
     ...DAGRE_LAYOUT,
     animate: true,
-    fit: false,           // do NOT re-fit the whole viewport
-  }).run();
+    fit: false,
+  }).run().on('layoutstop', () => {
+    cy.nodes().unlock();
+    lastExpandedId = null;
+  });
 }
 
 /**
@@ -209,5 +247,15 @@ function clear() {
     cy.elements().remove();
 }
 
+/**
+ * Mark a graph element as saved by its ID.
+ * Changes the element's visual style immediately via the [?saved] selector.
+ * @param {string} id - Element ID (txid for edges, address for nodes)
+ */
+function markSaved(id) {
+  const el = cy.getElementById(id);
+  if (el.length) el.data('saved', true);
+}
+
 // Export the module
-window.GraphModule = { addElements, buildNodeLabel, clear };
+window.GraphModule = { addElements, buildNodeLabel, clear, markSaved };

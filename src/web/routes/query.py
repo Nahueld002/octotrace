@@ -104,6 +104,17 @@ def _transfer_to_elements(transfers: list, min_amount: str = "1") -> Dict[str, A
             ).fetchall()
             saved_set = {r[0] for r in rows}
 
+    tx_saved_set: set = set()
+    all_txids = {t['txid'] for t in transfers if t.get('txid')}
+    if all_txids:
+        placeholders = ','.join('?' * len(all_txids))
+        with get_connection(read_only=True) as conn:
+            rows = conn.execute(
+                f"SELECT txid FROM transactions WHERE txid IN ({placeholders})",
+                list(all_txids),
+            ).fetchall()
+            tx_saved_set = {r[0] for r in rows}
+
     nodes: Dict[str, Any] = {}
     edges = []
 
@@ -143,7 +154,8 @@ def _transfer_to_elements(transfers: list, min_amount: str = "1") -> Dict[str, A
                 "target": to_addr,
                 "amount": f"{transfer['amount']} USDT",
                 "datetime": transfer['datetime_utc'],
-                "chain": transfer['chain']
+                "chain": transfer['chain'],
+                "saved": transfer['txid'] in tx_saved_set,
             }
         }
         edges.append(edge)
