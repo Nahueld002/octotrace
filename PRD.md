@@ -224,7 +224,7 @@ Never call `cy.destroy()`.
 ## Stack
 
 - **Backend:** FastAPI (Python 3.12+)
-- **Frontend:** Vanilla JS + Cytoscape.js + dagre layout (LR)
+- **Frontend:** Vanilla JS + Cytoscape.js + elk layout (layered, RIGHT direction)
 - **Database:** SQLite per case (`data/cases/case.sqlite`)
 - **APIs:** Etherscan API v2 + Tronscan API
 - **JS dependencies:** vendorized in `static/vendor/` (no CDN, offline-first)

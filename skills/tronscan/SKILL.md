@@ -117,6 +117,20 @@ has `tag1`, `tag1Url`, `name`, `vip`) is also available but the per-transfer
 
 **Endpoint**: `GET https://apilist.tronscanapi.com/api/transaction-info?hash={tx_hash}`
 
+**⚠ LIMITATION**: This endpoint does NOT return normalized TRC20 transfer data.
+The response contains raw contract call data (ownerAddress, toAddress,
+contractData) which is NOT compatible with the normalized format used by
+`token_trc20/transfers`. 
+
+For TRC20 enrichment by txid, the recommended approach is:
+1. Get the `from_address` from the graph context
+2. Call `get_transfers(from_address, start, end)` with a ±5 minute window
+3. Find the exact txid match in the results
+4. Extract fields from the matched transfer
+
+`TronscanProvider.get_transaction()` raises `NotImplementedError` — do NOT
+call it for TRC20 enrichment.
+
 **Key params**:
 
 | Parameter | Type | Description |

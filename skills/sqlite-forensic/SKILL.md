@@ -153,28 +153,35 @@ FOREIGN KEY (from_address) REFERENCES addresses(address) ON DELETE RESTRICT
 
 Every transaction write **must** include the complete original API response
 as a JSON string in `raw_json`. Additionally, both `from_address` and
-`to_address` are auto-saved to the addresses table with `times_seen = 1`.
+`to_address` are auto-saved to the addresses table with `times_seen = 1`
+(only for new transactions — controlled by `is_new_tx`).
 
 ```python
 import json
 from decimal import Decimal
 
-def save_transaction(conn: sqlite3.Connection, tx: dict, raw_response: dict) -> None:
+def save_transaction(conn: sqlite3.Connection, tx: dict, raw_response: dict,
+                     is_new_tx: bool = True) -> None:
     """Persist a normalized transaction with its original API payload.
 
-    Automatically saves both from_address and to_address with their tags.
+    Uses INSERT ... ON CONFLICT DO UPDATE for upsert semantics:
+    - On conflict: updates confirmations, tags, raw_json
+    - saved_at is preserved (never updated)
+    - Addresses are auto-saved but times_seen only increments for new txs
 
     Args:
         conn: Active sqlite3 connection from get_connection().
         tx: Normalized transaction dict with all required fields.
         raw_response: Original dict returned by the provider API.
+        is_new_tx: If False, addresses auto-saved but times_seen does NOT
+            increment (avoids double-counting on tx re-save).
 
     Raises:
         sqlite3.IntegrityError: If txid already exists (append-only).
     """
     conn.execute(
         """
-        INSERT OR IGNORE INTO transactions
+        INSERT INTO transactions
             (txid, chain, from_address, to_address, amount,
              datetime_utc, token_symbol, block_number, confirmations,
              tag_from, tag_to, service_from, service_to,
@@ -184,6 +191,14 @@ def save_transaction(conn: sqlite3.Connection, tx: dict, raw_response: dict) -> 
              :datetime_utc, :token_symbol, :block_number, :confirmations,
              :tag_from, :tag_to, :service_from, :service_to,
              :url_tx, :raw_json)
+        ON CONFLICT(txid) DO UPDATE SET
+            confirmations = excluded.confirmations,
+            block_number  = excluded.block_number,
+            tag_from      = COALESCE(excluded.tag_from, transactions.tag_from),
+            tag_to        = COALESCE(excluded.tag_to, transactions.tag_to),
+            service_from  = COALESCE(excluded.service_from, transactions.service_from),
+            service_to    = COALESCE(excluded.service_to, transactions.service_to),
+            raw_json      = excluded.raw_json
         """,
         {**tx, "raw_json": json.dumps(raw_response)},
     )
@@ -201,18 +216,22 @@ def save_transaction(conn: sqlite3.Connection, tx: dict, raw_response: dict) -> 
                 if chain == "ETH"
                 else f"https://tronscan.org/#/address/{addr}"
             )
-            save_address(conn, addr, chain, tag, None, None, _now, _now, url, None)
+            save_address(conn, addr, chain, tag, None, None, _now, _now, url, None,
+                         increment_seen=is_new_tx)
 ```
 
 ### Save Address (with times_seen counter)
 
 Uses `INSERT ... ON CONFLICT DO UPDATE`. On first insert `times_seen = 1`.
-On subsequent inserts for the same address, `times_seen` increments by 1.
-`first_seen_utc` is preserved via `COALESCE`.
+On subsequent inserts for the same address, `times_seen` increments by 1
+(unless `increment_seen=False` is passed — used when re-saving an existing
+transaction to avoid double-counting). `first_seen_utc` is preserved via
+`COALESCE`.
 
 ```python
 def save_address(conn: sqlite3.Connection, address: str, chain: str,
-                 tag_public: str | None, ...) -> None:
+                 tag_public: str | None, ...,
+                 increment_seen: bool = True) -> None:
     conn.execute(
         """
         INSERT INTO addresses
@@ -229,9 +248,10 @@ def save_address(conn: sqlite3.Connection, address: str, chain: str,
             last_seen_utc  = excluded.last_seen_utc,
             url_address    = excluded.url_address,
             raw_json       = COALESCE(excluded.raw_json, addresses.raw_json),
-            times_seen     = addresses.times_seen + 1
+            times_seen     = addresses.times_seen + (CASE WHEN ? THEN 1 ELSE 0 END)
         """,
-        (address, chain, tag_public, ...),
+        (address, chain, tag_public, ...,
+         1 if increment_seen else 0),
     )
 ```
 
