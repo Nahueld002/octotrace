@@ -102,14 +102,20 @@ const GRAPH_STYLES = [
 ];
 
 // Layout configuration
-const DAGRE_LAYOUT = {
-  name: 'dagre',
-  rankDir: 'LR',        // Left to Right — money flow direction
-  nodeSep: 60,          // horizontal spacing between nodes
-  rankSep: 120,         // vertical spacing between ranks
-  padding: 40,
+const ELK_LAYOUT = {
+  name: 'elk',
   animate: true,
   animationDuration: 400,
+  fit: false,
+  elk: {
+    'algorithm': 'layered',
+    'elk.direction': 'RIGHT',
+    'elk.layered.spacing.nodeNodeBetweenLayers': '120',
+    'elk.spacing.nodeNode': '60',
+    'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+    'elk.layered.cycleBreaking.strategy': 'GREEDY',
+    'elk.edgeRouting': 'ORTHOGONAL',
+  },
 };
 
 // Initialize Cytoscape instance
@@ -196,33 +202,53 @@ function addElements(nodes, edges) {
 
   cy.add([...newNodes, ...newEdges]);
 
+  const isInitialLoad = cy.nodes().length === newNodes.length;
   const newIds = [...newNodes.map((n) => n.data.id),
                   ...newEdges.map((e) => e.data.id)];
-  expandLayout(newIds);
+
+  if (isInitialLoad) {
+    // Primer render — usar elk para layout completo
+    cy.layout({ ...ELK_LAYOUT, fit: true }).run();
+  } else {
+    // Expansión — posicionamiento manual sin mover nodos existentes
+    expandLayout(newIds);
+  }
 }
 
 /**
- * Run layout on new elements without repositioning existing nodes.
- * Locks existing nodes in place before running dagre on the full graph,
- * then unlocks them after layout completes.
- * @param {Array} newNodeIds - Array of new element IDs to layout around
+ * Position new nodes manually in a fan-out pattern to the right of the anchor node.
+ * Called during expansions — avoids re-running elk on the entire graph.
+ * @param {Array} newNodeIds - Array of new element IDs to position
  */
 function expandLayout(newNodeIds) {
-  // Freeze existing nodes in place — but keep the expanded node locked too
-  cy.nodes().forEach((node) => {
-    if (!newNodeIds.includes(node.id()) || node.id() === lastExpandedId) {
-      node.lock();
-    }
+  const anchorNode = lastExpandedId ? cy.getElementById(lastExpandedId) : null;
+  const anchorPos = anchorNode && anchorNode.length
+    ? anchorNode.position()
+    : { x: 0, y: 0 };
+
+  const newNodes = cy.nodes().filter((n) =>
+    newNodeIds.includes(n.id()) && n.id() !== lastExpandedId
+  );
+
+  if (!newNodes.length) {
+    lastExpandedId = null;
+    return;
+  }
+
+  // Posicionar nuevos nodos en abanico a la derecha del anchor
+  const STEP_X = 220;
+  const STEP_Y = 80;
+  const total = newNodes.length;
+  const startY = anchorPos.y - ((total - 1) * STEP_Y) / 2;
+
+  newNodes.forEach((node, i) => {
+    node.position({
+      x: anchorPos.x + STEP_X,
+      y: startY + i * STEP_Y,
+    });
   });
 
-  cy.layout({
-    ...DAGRE_LAYOUT,
-    animate: true,
-    fit: false,
-  }).run().on('layoutstop', () => {
-    cy.nodes().unlock();
-    lastExpandedId = null;
-  });
+  lastExpandedId = null;
 }
 
 /**

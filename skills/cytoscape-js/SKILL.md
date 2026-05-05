@@ -31,18 +31,21 @@ metadata:
 
 ## Stack Constraint
 
-Cytoscape.js is loaded via CDN in `index.html`. The `dagre` layout requires
-the `cytoscape-dagre` plugin, also loaded via CDN **before** the app scripts.
+Cytoscape.js is loaded first via vendor file, followed by elkjs and the
+cytoscape-elk adapter. All three are vendorized locally in `static/vendor/`.
 
 ```html
-<!-- Required CDN order in index.html — do not reorder -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
-<script src="app.js"></script>
-<script src="graph.js"></script>
-<script src="panel.js"></script>
+<!-- Required load order in index.html — do not reorder -->
+<script src="/static/vendor/cytoscape.min.js"></script>
+<script src="/static/vendor/elk.bundled.js"></script>
+<script src="/static/vendor/cytoscape-elk.js"></script>
+<script src="/static/app.js"></script>
+<script src="/static/graph.js"></script>
+<script src="/static/panel.js"></script>
 ```
+
+dagre files (`dagre.min.js`, `cytoscape-dagre.min.js`) remain in `vendor/`
+for rollback safety but are no longer loaded in index.html.
 
 ---
 

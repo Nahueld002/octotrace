@@ -87,22 +87,52 @@ async def save_transaction_endpoint(request: SaveTxRequest):
         Success status
     """
     try:
-        # Parse the raw_json string back to dict
         raw_response = json.loads(request.tx.raw_json)
-        
-        # Save the transaction
+        tx_dict = request.tx.dict()
+
+        # Clean token suffix from amount if it came from the graph edge
+        if tx_dict.get('amount') and isinstance(tx_dict['amount'], str):
+            tx_dict['amount'] = tx_dict['amount'].replace(' USDT', '').replace(' TRX', '').strip()
+
+        # If raw_json is empty, enrich with provider data (TRON only)
+        if not raw_response and request.tx.chain == "TRON":
+            try:
+                from datetime import datetime, timedelta
+                provider = TronscanProvider()
+                # Buscar en un rango amplio alrededor de la fecha de la tx
+                tx_dt = datetime.fromisoformat(request.tx.datetime_utc)
+                start = tx_dt - timedelta(minutes=5)
+                end = tx_dt + timedelta(minutes=5)
+                transfers = provider.get_transfers(
+                    request.tx.from_address, start, end
+                )
+                # Buscar el txid específico en los resultados
+                match = next(
+                    (t for t in transfers if t.get('txid') == request.tx.txid),
+                    None
+                )
+                if match:
+                    for field in ['block_number', 'confirmations', 'tag_from',
+                                  'tag_to', 'service_from', 'service_to',
+                                  'token_symbol', 'amount']:
+                        if match.get(field) is not None:
+                            tx_dict[field] = match[field]
+                    # raw_json viene como string JSON en el transfer normalizado
+                    raw_response = json.loads(match.get('raw_json', '{}'))
+            except Exception:
+                pass  # Si falla, guardar con datos básicos
+
         with get_connection() as conn:
-            # Check if transaction already existed before upsert
             existing = conn.execute(
-                "SELECT id FROM transactions WHERE txid = ?", 
+                "SELECT id FROM transactions WHERE txid = ?",
                 (request.tx.txid,)
             ).fetchone()
             already_existed = existing is not None
-            
-            save_transaction(conn, request.tx.dict(), raw_response,
+
+            save_transaction(conn, tx_dict, raw_response,
                              is_new_tx=not already_existed)
             conn.commit()
-        
+
         return {"status": "success", "already_existed": already_existed}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save transaction: {str(e)}")

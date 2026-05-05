@@ -66,6 +66,15 @@ paths without losing visual context.
 
 States are combinable: a saved+expanded node is green with yellow dashed border.
 
+### Edge Visual States
+| State | Color | Width |
+|---|---|---|
+| Normal | `#0f3460` | 2px |
+| Saved in DB | Green `#2d8a4e` | 3px |
+| Selected | Yellow `#f5a623` | 3px |
+
+States are combinable: a saved edge is green; if also selected it turns yellow.
+
 ### Side Panel
 
 - Opens on single click on node or edge

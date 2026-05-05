@@ -96,49 +96,24 @@ class TronscanProvider(BaseProvider):
             return []
 
     def get_transaction(self, txid: str) -> Dict:
-        """Fetch a single transaction by hash.
+        """Fetch a single TRC20 transfer by transaction hash.
+
+        Uses token_trc20/transfers with relatedAddress from a broad search,
+        then filters by transaction_id.
+
+        Note:
+            Tronscan does not support direct TRC20 lookup by txid for
+            normalized transfer data. Use get_transfers() instead.
 
         Args:
             txid: TRON transaction hash
 
-        Returns:
-            Normalized transaction dictionary
-
         Raises:
-            requests.RequestException: If API call fails
-            ValueError: If transaction not found
+            NotImplementedError: Always — use get_transfers() instead.
         """
-        try:
-            # Prepare API parameters
-            params = {"hash": txid}
-
-            # Make API request
-            response = requests.get(
-                f"{self.API_BASE}/transaction-info",
-                params=params,
-                headers=self.headers,
-                timeout=30,
-            )
-            response.raise_for_status()
-
-            data = response.json()
-
-            # Check if transaction was found
-            if not data.get("success", False):
-                raise ValueError("Transaction not found")
-
-            # Extract contractInfo at response level
-            contract_info = data.get("contractInfo", {})
-
-            # Normalize the transfer data
-            return self._normalize_tronscan_transfer(
-                data.get("data", {}), contract_info
-            )
-
-        except requests.RequestException:
-            raise
-        except Exception:
-            raise ValueError("Transaction not found")
+        raise NotImplementedError(
+            "Direct TRC20 lookup by txid not supported. Use get_transfers() instead."
+        )
 
     def get_address_info(self, address: str) -> Dict:
         """Fetch address metadata (tags, service info) from Tronscan.
