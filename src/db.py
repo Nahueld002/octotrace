@@ -76,6 +76,31 @@ CREATE TABLE IF NOT EXISTS addresses (
 );
 """
 
+# Schema: sequences table (for tracking transaction sequences)
+SCHEMA_SEQUENCES: Final[str] = """
+CREATE TABLE IF NOT EXISTS sequences (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL UNIQUE,
+    description TEXT    DEFAULT '',
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+"""
+
+# Schema: sequence_jumps table (for tracking transaction jumps within sequences)
+SCHEMA_SEQUENCE_JUMPS: Final[str] = """
+CREATE TABLE IF NOT EXISTS sequence_jumps (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    sequence_id   INTEGER NOT NULL REFERENCES sequences(id) ON DELETE CASCADE,
+    txid          TEXT    NOT NULL REFERENCES transactions(txid),
+    jump_number   INTEGER NOT NULL CHECK(jump_number >= 1),
+    notes         TEXT    DEFAULT '',
+    assigned_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(sequence_id, jump_number)
+);
+CREATE INDEX IF NOT EXISTS idx_jumps_sequence ON sequence_jumps(sequence_id, jump_number);
+CREATE INDEX IF NOT EXISTS idx_jumps_txid ON sequence_jumps(txid);
+"""
+
 
 def get_connection(read_only: bool = False) -> sqlite3.Connection:
     """Return a sqlite3 connection with foreign keys enabled and row factory.
@@ -122,6 +147,8 @@ def init_db() -> None:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript(SCHEMA_TRANSACTIONS)
         conn.executescript(SCHEMA_ADDRESSES)
+        conn.executescript(SCHEMA_SEQUENCES)
+        conn.executescript(SCHEMA_SEQUENCE_JUMPS)
         # Migration: add times_seen to existing addresses tables created
         # before v0.1.1. Safe — adds column with DEFAULT 1 for existing rows.
         try:
