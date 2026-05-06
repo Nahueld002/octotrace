@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS addresses (
     address         TEXT    NOT NULL UNIQUE,
     chain           TEXT    NOT NULL CHECK(chain IN ('ETH', 'TRON')),
     tag_public      TEXT,
+    label_manual    TEXT,
     service_name    TEXT,
     service_url     TEXT,
     first_seen_utc  TEXT,
@@ -127,6 +128,14 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE addresses ADD COLUMN times_seen "
                 "INTEGER NOT NULL DEFAULT 1"
+            )
+        except sqlite3.OperationalError:
+            # Column already exists — migration was already applied
+            pass
+        # Migration: add label_manual column (v0.3.0)
+        try:
+            conn.execute(
+                "ALTER TABLE addresses ADD COLUMN label_manual TEXT"
             )
         except sqlite3.OperationalError:
             # Column already exists — migration was already applied
@@ -228,8 +237,13 @@ def save_transaction(
                 if chain == "ETH"
                 else f"https://tronscan.org/#/address/{addr}"
             )
-            save_address(conn, addr, chain, tag, None, None, _now, _now, url, None,
-                         increment_seen=is_new_tx)
+            save_address(
+                conn, addr, chain, tag,
+                service_name=None, service_url=None,
+                first_seen_utc=_now, last_seen_utc=_now,
+                url_address=url, raw_json=None,
+                increment_seen=is_new_tx,
+            )
 
 
 def save_address(
@@ -237,12 +251,13 @@ def save_address(
     address: str,
     chain: str,
     tag_public: str | None,
-    service_name: str | None,
-    service_url: str | None,
-    first_seen_utc: str | None,
-    last_seen_utc: str | None,
-    url_address: str | None,
-    raw_json: dict | None,
+    label_manual: str | None = None,
+    service_name: str | None = None,
+    service_url: str | None = None,
+    first_seen_utc: str | None = None,
+    last_seen_utc: str | None = None,
+    url_address: str | None = None,
+    raw_json: dict | None = None,
     increment_seen: bool = True,
 ) -> None:
     """Persist or update address metadata.
@@ -258,23 +273,27 @@ def save_address(
         address: Wallet address (unique key).
         chain: Blockchain identifier ('ETH' or 'TRON').
         tag_public: Public nametag from provider API.
+        label_manual: Manual user-defined label for this address.
         service_name: Known service name if detected.
         service_url: Official service URL.
         first_seen_utc: ISO-8601 timestamp of first observation.
         last_seen_utc: ISO-8601 timestamp of most recent observation.
         url_address: Auto-generated evidence URL.
-        raw_json: Full original API response dict.
     """
     conn.execute(
         """
         INSERT INTO addresses
-            (address, chain, tag_public, service_name, service_url,
+            (address, chain, tag_public, label_manual,
+             service_name, service_url,
              first_seen_utc, last_seen_utc, url_address, raw_json,
              times_seen)
         VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            (?, ?, ?, ?,
+             ?, ?, ?, ?, ?, ?,
+             1)
         ON CONFLICT(address) DO UPDATE SET
             tag_public     = excluded.tag_public,
+            label_manual   = COALESCE(excluded.label_manual, addresses.label_manual),
             service_name   = excluded.service_name,
             service_url    = excluded.service_url,
             first_seen_utc = COALESCE(addresses.first_seen_utc, excluded.first_seen_utc),
@@ -287,6 +306,7 @@ def save_address(
             address,
             chain,
             tag_public,
+            label_manual,
             service_name,
             service_url,
             first_seen_utc,

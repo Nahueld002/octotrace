@@ -9,6 +9,9 @@ window.AppState = {
   currentChain: 'ETH',
   dateRange: {from: '', to: ''},
   nodeContextMap: {},
+  caseViewActive: false,
+  caseGraphLoaded: false,
+  cyCase: null,
   
   /**
    * Get node context information
@@ -104,6 +107,9 @@ function handleSearch() {
  * @param {Object} eventDetail - Event detail with node data
  */
 function handleNodeExpand(eventDetail) {
+  // Do not expand in case view — no date range context, out of scope
+  if (AppState.caseViewActive) return;
+
   const nodeId = eventDetail.id;
   const nodeData = eventDetail.data;
   const minAmountInput = document.getElementById('min-amount');
@@ -233,6 +239,84 @@ function handleSaveTx(tx) {
 }
 
 /**
+ * Handle case view toggle button click.
+ * Switches between the main investigation graph and the case graph view.
+ * Uses CSS .hidden class to toggle visibility — never calls destroy().
+ * The case graph is lazily loaded on first toggle to case view.
+ * Inputs are disabled while case view is active.
+ */
+function handleCaseToggle() {
+  const toggleBtn = document.getElementById('case-toggle-btn');
+  const caseContainer = document.getElementById('case-graph-container');
+  const mainContainer = document.getElementById('graph-container');
+  const searchInputs = [
+    'address-input', 'chain-select', 'date-from', 'date-to',
+    'min-amount', 'search-btn', 'clear-btn'
+  ];
+
+  if (AppState.caseViewActive) {
+    // --- Switch OFF: clear case view, show main view ---
+    // Clear the case graph elements (never destroy the instance)
+    // The cyCase instance persists in memory but empty, per user constraint
+    if (AppState.cyCase) {
+      GraphModule.clearCaseGraph(AppState.cyCase);
+    }
+    caseContainer.classList.add('hidden');
+    mainContainer.classList.remove('hidden');
+    AppState.caseViewActive = false;
+    AppState.caseGraphLoaded = false;
+    toggleBtn.textContent = '📁 Case View';
+    // Re-enable search inputs
+    searchInputs.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = false;
+    });
+  } else {
+    // --- Switch ON: hide main view, show case view ---
+    mainContainer.classList.add('hidden');
+    caseContainer.classList.remove('hidden');
+    AppState.caseViewActive = true;
+    toggleBtn.textContent = '🔍 Investigation';
+    // Disable search inputs
+    searchInputs.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = true;
+    });
+
+    // Always re-fetch fresh data (case view = fresh snapshot each activation)
+    // Show spinner, hide empty message
+    document.getElementById('case-spinner').classList.remove('hidden');
+    document.getElementById('case-empty').classList.add('hidden');
+
+    fetch('/api/case/graph')
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then(data => {
+        document.getElementById('case-spinner').classList.add('hidden');
+        if (data.elements && (data.elements.nodes.length || data.elements.edges.length)) {
+          // Create cyCase once on first load, reuse on subsequent toggles
+          if (!AppState.cyCase) {
+            AppState.cyCase = GraphModule.initCaseGraph('case-graph-container');
+          }
+          GraphModule.addCaseElements(data.elements.nodes, data.elements.edges);
+          GraphModule.runLayout(AppState.cyCase, { fit: true });
+          AppState.caseGraphLoaded = true;
+        } else {
+          document.getElementById('case-empty').classList.remove('hidden');
+        }
+      })
+      .catch(err => {
+        document.getElementById('case-spinner').classList.add('hidden');
+        const emptyEl = document.getElementById('case-empty');
+        emptyEl.textContent = 'Error: ' + err.message;
+        emptyEl.classList.remove('hidden');
+      });
+  }
+}
+
+/**
  * Initialize event listeners
  */
 function initApp() {
@@ -261,11 +345,27 @@ function initApp() {
     handleSaveTx(e.detail);
   });
 
+  // Listen for address label save events from panel.js
+  document.addEventListener('address:label', (e) => {
+    const { address, chain, label_manual } = e.detail;
+    fetch('/api/address/label', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address, chain, label_manual })
+    })
+    .then(r => r.json())
+    .then(() => alert('\u2705 Etiqueta guardada.'))
+    .catch(err => alert('Error: ' + err.message));
+  });
+
   // Clear button — removes all elements from graph and closes panel
   document.getElementById('clear-btn').addEventListener('click', () => {
     GraphModule.clear();
     PanelModule.hide();
   });
+
+  // Case view toggle button
+  document.getElementById('case-toggle-btn').addEventListener('click', handleCaseToggle);
 }
 
 // Initialize the app when DOM is loaded

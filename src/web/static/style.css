@@ -221,3 +221,83 @@ body {
 #panel-resize-handle:active {
     background: rgba(233, 69, 96, 0.3);
 }
+
+/* Hidden utility class — used instead of display:none to allow
+   Cytoscape containers to maintain their dimensions while hidden */
+.hidden {
+    display: none !important;
+}
+
+/* Case graph container — same dimensions and position as main container */
+#case-graph-container {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+}
+
+/* Case spinner and empty message */
+#case-spinner, #case-empty {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #ccc;
+    font-size: 16px;
+    z-index: 2;
+}
+
+/* Case view toggle button */
+#case-toggle-btn {
+    background: #2d8a4e;
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+#case-toggle-btn:hover {
+    background: #3a9e5e;
+}
+
+/* Disabled inputs in the input bar */
+#input-bar input:disabled,
+#input-bar select:disabled,
+#input-bar button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Saved transaction row highlight */
+.panel-transactions-table tr.tx-saved {
+  background-color: rgba(45, 138, 78, 0.15);
+  border-left: 3px solid #2d8a4e;
+}
+
+.panel-transactions-table tr.tx-saved td:first-child {
+  padding-left: 6px;
+}
+
+/* Panel manual label input */
+.panel-label-input {
+    flex: 1;
+    background: #1a1a2e;
+    border: 1px solid #4a4a6a;
+    color: #ffffff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.panel-label-save-btn {
+    margin-left: 6px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+}

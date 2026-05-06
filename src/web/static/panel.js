@@ -82,6 +82,33 @@ PanelModule.show = function(data) {
       content.appendChild(fieldDiv);
     });
     
+    // Etiqueta manual editable
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'panel-field';
+    const labelLabel = document.createElement('label');
+    labelLabel.textContent = 'Label';
+    const labelInput = document.createElement('input');
+    labelInput.type = 'text';
+    labelInput.className = 'panel-label-input';
+    labelInput.placeholder = 'Add manual label...';
+    labelInput.value = data.label_manual || '';
+    const labelBtn = document.createElement('button');
+    labelBtn.textContent = '\u{1F4BE}';
+    labelBtn.className = 'panel-label-save-btn';
+    labelBtn.onclick = () => {
+      document.dispatchEvent(new CustomEvent('address:label', {
+        detail: {
+          address: data.id,
+          chain: data.chain,
+          label_manual: labelInput.value.trim()
+        }
+      }));
+    };
+    labelDiv.appendChild(labelLabel);
+    labelDiv.appendChild(labelInput);
+    labelDiv.appendChild(labelBtn);
+    content.appendChild(labelDiv);
+
     // Add evidence link
     const evidenceLink = document.createElement('a');
     evidenceLink.href = `https://${data.chain === 'ETH' ? 'etherscan.io/address/' + data.id : 'tronscan.org/#/address/' + data.id}`;
@@ -151,6 +178,9 @@ PanelModule.renderTransfers = function(transfers, focalAddress) {
   const tbody = document.createElement('tbody');
   transfers.forEach(tx => {
     const row = document.createElement('tr');
+    if (tx.saved) {
+      row.classList.add('tx-saved');
+    }
 
     // Type badge (IN / OUT / SELF)
     const typeCell = document.createElement('td');

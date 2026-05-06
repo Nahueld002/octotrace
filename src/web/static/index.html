@@ -20,9 +20,15 @@
         <label for="min-amount">min USDT</label>
         <button id="search-btn">Search</button>
         <button id="clear-btn" title="Limpiar grafo">🗑 Limpiar</button>
+        <button id="case-toggle-btn">📁 Case View</button>
     </div>
     
     <div id="graph-container"></div>
+    
+    <div id="case-graph-container" class="hidden">
+        <div id="case-spinner" class="hidden">Cargando...</div>
+        <div id="case-empty" class="hidden">No hay transacciones guardadas</div>
+    </div>
     
     <div id="panel-resize-handle"></div>
     <div id="side-panel">

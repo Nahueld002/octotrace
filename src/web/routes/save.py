@@ -57,6 +57,12 @@ class SaveAddressRequest(BaseModel):
     """Request model for saving addresses."""
     address: AddressRecord
 
+class LabelRequest(BaseModel):
+    """Request model for setting a manual label on an address."""
+    address: str
+    chain: str
+    label_manual: str
+
 def _get_provider(chain: str) -> BaseProvider:
     """Get appropriate provider based on chain.
     
@@ -170,3 +176,37 @@ async def save_address_endpoint(request: SaveAddressRequest):
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save address: {str(e)}")
+
+
+@router.patch("/address/label")
+async def set_address_label(request: LabelRequest):
+    """Set or update a manual label for an address.
+
+    Uses INSERT ... ON CONFLICT DO UPDATE so the label persists even if
+    the address was not previously in the database. Creates a minimal
+    address record (without provider data) labeled by the user.
+
+    Args:
+        request: Label request with address, chain, and label_manual.
+
+    Returns:
+        Success status.
+    """
+    try:
+        with get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO addresses (address, chain, label_manual, times_seen)
+                VALUES (?, ?, ?, 1)
+                ON CONFLICT(address) DO UPDATE SET
+                    label_manual = excluded.label_manual
+                """,
+                (request.address, request.chain, request.label_manual),
+            )
+            conn.commit()
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to set address label: {str(e)}",
+        )

@@ -76,7 +76,9 @@ const GRAPH_STYLES = [
       'target-arrow-color': EDGE_COLOR,
       'target-arrow-shape': 'triangle',
       'curve-style': 'bezier',
-      'label': 'data(amount)',
+      'label': 'data(edgeLabel)',
+      'text-wrap': 'wrap',
+      'text-max-width': '120px',
       'font-size': '10px',
       'color': '#ccc',
       'text-rotation': 'autorotate',
@@ -202,6 +204,16 @@ function addElements(nodes, edges) {
 
   cy.add([...newNodes, ...newEdges]);
 
+  // Set compound edge label: amount + datetime
+  newEdges.forEach(e => {
+    const el = cy.getElementById(e.data.id);
+    if (!el.length) return;
+    const amount = e.data.amount || '';
+    const dt = e.data.datetime || '';
+    const dateShort = dt ? dt.slice(0, 16).replace('T', ' ') : '';
+    el.data('edgeLabel', dateShort ? `${amount}\n${dateShort}` : amount);
+  });
+
   const isInitialLoad = cy.nodes().length === newNodes.length;
   const newIds = [...newNodes.map((n) => n.data.id),
                   ...newEdges.map((e) => e.data.id)];
@@ -283,5 +295,79 @@ function markSaved(id) {
   if (el.length) el.data('saved', true);
 }
 
+/**
+ * Run a layout on the given Cytoscape instance.
+ * Used by app.js to trigger layout after adding elements to the case view.
+ *
+ * @param {Object} cyInstance - Cytoscape instance to layout
+ * @param {Object} layoutOptions - Layout configuration (merged with defaults)
+ */
+function runLayout(cyInstance, layoutOptions = {}) {
+  cyInstance.layout({ ...ELK_LAYOUT, ...layoutOptions }).run();
+}
+
+/**
+ * Initialize a new Cytoscape instance for the case graph view.
+ * Uses the same GRAPH_STYLES and event handlers as the main graph.
+ * Layout is NOT triggered here — app.js adds elements then calls runLayout.
+ *
+ * @param {string} containerId - DOM element ID for the container
+ * @returns {Object} New Cytoscape instance
+ */
+function initCaseGraph(containerId) {
+  const cyCase = cytoscape({
+    container: document.getElementById(containerId),
+    elements: [],
+    style: GRAPH_STYLES,
+    layout: { name: 'preset' },
+  });
+  setupEvents(cyCase);
+  return cyCase;
+}
+
+/**
+ * Clear all elements from the case graph instance.
+ * Used instead of destroy() — the container is hidden via CSS, and the
+ * instance persists in memory but empty. This avoids the destroy/recreate
+ * cycle and prevents memory leaks from orphaned event listeners.
+ *
+ * @param {Object} cyInstance - Cytoscape instance to clear
+ */
+function clearCaseGraph(cyInstance) {
+  if (cyInstance) {
+    cyInstance.elements().remove();
+  }
+}
+
+/**
+ * Add nodes and edges to the case graph without duplicating existing elements.
+ * Uses AppState.cyCase as the target Cytoscape instance.
+ * Does NOT run layout — app.js handles that separately.
+ *
+ * @param {Array} nodes - Array of Cytoscape node descriptors { data: { id, label, tag, chain } }
+ * @param {Array} edges - Array of Cytoscape edge descriptors { data: { id, source, target, amount, datetime } }
+ */
+function addCaseElements(nodes, edges) {
+  const cyCase = AppState.cyCase;
+  if (!cyCase) return;
+
+  const newNodes = nodes.filter((n) => !cyCase.getElementById(n.data.id).length);
+  const newEdges = edges.filter((e) => !cyCase.getElementById(e.data.id).length);
+
+  if (!newNodes.length && !newEdges.length) return;
+
+  cyCase.add([...newNodes, ...newEdges]);
+
+  // Set compound edge label: amount + datetime
+  newEdges.forEach(e => {
+    const el = cyCase.getElementById(e.data.id);
+    if (!el.length) return;
+    const amount = e.data.amount || '';
+    const dt = e.data.datetime || '';
+    const dateShort = dt ? dt.slice(0, 16).replace('T', ' ') : '';
+    el.data('edgeLabel', dateShort ? `${amount}\n${dateShort}` : amount);
+  });
+}
+
 // Export the module
-window.GraphModule = { addElements, buildNodeLabel, clear, markSaved };
+window.GraphModule = { addElements, addCaseElements, buildNodeLabel, clear, markSaved, initCaseGraph, clearCaseGraph, runLayout };

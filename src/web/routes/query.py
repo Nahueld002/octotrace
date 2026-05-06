@@ -104,6 +104,18 @@ def _transfer_to_elements(transfers: list, min_amount: str = "1") -> Dict[str, A
             ).fetchall()
             saved_set = {r[0] for r in rows}
 
+    # Fetch label_manual for all addresses in the batch
+    label_manual_map: dict = {}
+    if all_addresses:
+        placeholders = ','.join('?' * len(all_addresses))
+        with get_connection(read_only=True) as conn:
+            rows = conn.execute(
+                f"SELECT address, label_manual FROM addresses "
+                f"WHERE address IN ({placeholders})",
+                list(all_addresses),
+            ).fetchall()
+            label_manual_map = {r[0]: r[1] for r in rows}
+
     tx_saved_set: set = set()
     all_txids = {t['txid'] for t in transfers if t.get('txid')}
     if all_txids:
@@ -130,6 +142,7 @@ def _transfer_to_elements(transfers: list, min_amount: str = "1") -> Dict[str, A
                     "chain": transfer['chain'],
                     "saved": from_addr in saved_set,
                     "is_service": bool(transfer.get('service_from')),
+                    "label_manual": label_manual_map.get(from_addr),
                 }
             }
 
@@ -144,6 +157,7 @@ def _transfer_to_elements(transfers: list, min_amount: str = "1") -> Dict[str, A
                     "chain": transfer['chain'],
                     "saved": to_addr in saved_set,
                     "is_service": bool(transfer.get('service_to')),
+                    "label_manual": label_manual_map.get(to_addr),
                 }
             }
 
@@ -254,4 +268,20 @@ async def get_node_transactions(
     start = datetime.fromisoformat(start_dt)
     end = datetime.fromisoformat(end_dt)
     transfers = provider.get_transfers(address, start, end)
-    return {"address": address, "transfers": transfers}
+
+    # Mark which transfers are already saved in the DB
+    all_txids = [t['txid'] for t in transfers if t.get('txid')]
+    saved_txids: set = set()
+    if all_txids:
+        placeholders = ','.join('?' * len(all_txids))
+        with get_connection(read_only=True) as conn:
+            rows = conn.execute(
+                f"SELECT txid FROM transactions WHERE txid IN ({placeholders})",
+                all_txids,
+            ).fetchall()
+            saved_txids = {r[0] for r in rows}
+
+    for t in transfers:
+        t['saved'] = t.get('txid') in saved_txids
+
+    return {"address": address, "chain": chain.upper(), "transfers": transfers}

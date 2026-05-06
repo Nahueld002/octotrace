@@ -60,7 +60,7 @@ class TronscanProvider(BaseProvider):
                 "relatedAddress": address,
                 "start_timestamp": start_timestamp,
                 "end_timestamp": end_timestamp,
-                "limit": 50,
+                "limit": 100,
             }
 
             # Make API request
