@@ -187,6 +187,72 @@ function setupEvents(cy) {
     const el = cy.getElementById(id);
     if (el.length) el.data('saved', true);
   });
+  
+  // Listen for sequence highlight events
+  document.addEventListener('sequences:highlight', (e) => {
+    const sequenceName = e.detail.sequence_name;
+    highlightSequenceEdges(sequenceName);
+  });
+  
+  // Listen for clear highlight events
+  document.addEventListener('sequences:clear-highlight', () => {
+    clearSequenceHighlighting();
+  });
+}
+
+/**
+ * Highlight edges belonging to a sequence
+ * @param {string} sequenceName - Name of the sequence to highlight
+ */
+function highlightSequenceEdges(sequenceName) {
+  // In a real implementation, this would fetch the sequence details
+  // and highlight the appropriate edges. For now, we'll implement
+  // the highlighting logic that can be called from sequences.js
+}
+
+/**
+ * Clear sequence highlighting and restore normal edge styles
+ */
+function clearSequenceHighlighting() {
+  // Restore all edges to normal style
+  cy.edges().style({
+    'line-color': '#0f3460',
+    'target-arrow-color': '#0f3460',
+    'width': 2,
+    'opacity': 1
+  });
+  
+  // Restore saved edges to their green color
+  cy.edges('[?saved]').style({
+    'line-color': '#2d8a4e',
+    'target-arrow-color': '#2d8a4e',
+    'width': 3
+  });
+}
+
+/**
+ * Apply highlighting to specific edges by transaction IDs
+ * @param {Array} txids - Array of transaction IDs to highlight
+ */
+function highlightEdgesByTxids(txids) {
+  // Clear any existing highlighting first
+  clearSequenceHighlighting();
+  
+  // Dim all edges first
+  cy.edges().style('opacity', 0.3);
+  
+  // Highlight specific edges
+  txids.forEach(txid => {
+    const edge = cy.getElementById(txid);
+    if (edge.length) {
+      edge.style({
+        'line-color': '#f5a623',
+        'target-arrow-color': '#f5a623',
+        'width': 3,
+        'opacity': 1
+      });
+    }
+  });
 }
 
 /**
@@ -370,4 +436,4 @@ function addCaseElements(nodes, edges) {
 }
 
 // Export the module
-window.GraphModule = { addElements, addCaseElements, buildNodeLabel, clear, markSaved, initCaseGraph, clearCaseGraph, runLayout };
+window.GraphModule = { addElements, addCaseElements, buildNodeLabel, clear, markSaved, initCaseGraph, clearCaseGraph, runLayout, highlightEdgesByTxids, clearSequenceHighlighting };

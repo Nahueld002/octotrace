@@ -358,6 +358,52 @@ function initApp() {
     .catch(err => alert('Error: ' + err.message));
   });
 
+  // Listen for sequence assignment events from panel.js
+  document.addEventListener('sequences:assign', (e) => {
+    const { sequence_id, txid, jump_number, notes } = e.detail;
+    fetch(`/api/sequences/${sequence_id}/jumps`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txid, jump_number, notes })
+    })
+    .then(r => {
+      if (!r.ok) {
+        return r.json().then(err => {
+          throw new Error(err.detail || `HTTP ${r.status}`);
+        });
+      }
+      return r.json();
+    })
+    .then(() => {
+      // Notify that sequences have changed
+      document.dispatchEvent(new CustomEvent('sequences:changed'));
+      alert('\u2705 Transaction assigned to sequence.');
+    })
+    .catch(err => alert('Error: ' + err.message));
+  });
+
+  // Listen for sequence unassignment events from panel.js
+  document.addEventListener('sequences:unassign', (e) => {
+    const { jump_id } = e.detail;
+    fetch(`/api/jumps/${jump_id}`, {
+      method: 'DELETE'
+    })
+    .then(r => {
+      if (!r.ok) {
+        return r.json().then(err => {
+          throw new Error(err.detail || `HTTP ${r.status}`);
+        });
+      }
+      return r.json();
+    })
+    .then(() => {
+      // Notify that sequences have changed
+      document.dispatchEvent(new CustomEvent('sequences:changed'));
+      alert('\u2705 Transaction unassigned from sequence.');
+    })
+    .catch(err => alert('Error: ' + err.message));
+  });
+
   // Clear button — removes all elements from graph and closes panel
   document.getElementById('clear-btn').addEventListener('click', () => {
     GraphModule.clear();

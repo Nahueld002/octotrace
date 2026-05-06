@@ -247,10 +247,177 @@ PanelModule.renderTransfers = function(transfers, focalAddress) {
   });
   table.appendChild(tbody);
   content.appendChild(table);
+  
+  // Add sequence assignment section after the table
+  addSequenceAssignmentSection(content, focalAddress);
 };
 
 /**
- * Hide the side panel
+ * Add sequence assignment section to panel content
+ */
+function addSequenceAssignmentSection(content, focalAddress) {
+  // Only show for edges (transactions)
+  if (!focalAddress) return;
+  
+  const section = document.createElement('div');
+  section.className = 'sequence-assignment-section';
+  section.innerHTML = `
+    <h4>Sequence Assignment</h4>
+    <div id="sequence-assignment-content">
+      <p>Loading sequences...</p>
+    </div>
+  `;
+  
+  content.appendChild(section);
+  
+  // Load sequences and current assignments
+  loadSequenceAssignmentData(focalAddress);
+}
+
+/**
+ * Load sequence assignment data for a transaction
+ */
+function loadSequenceAssignmentData(txid) {
+  // Load all sequences
+  fetch('/api/sequences')
+    .then(response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    })
+    .then(sequences => {
+      // Load current assignments for this transaction
+      return fetch(`/api/tx/${encodeURIComponent(txid)}/sequences`)
+        .then(response => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        })
+        .then(assignments => ({ sequences, assignments, txid }));
+    })
+    .then(({ sequences, assignments, txid }) => {
+      renderSequenceAssignmentSection(sequences, assignments, txid);
+    })
+    .catch(error => {
+      console.error('Error loading sequence data:', error);
+      const contentEl = document.getElementById('sequence-assignment-content');
+      if (contentEl) {
+        contentEl.innerHTML = `<p class="error">Error loading sequences: ${error.message}</p>`;
+      }
+    });
+}
+
+/**
+ * Render sequence assignment section
+ */
+function renderSequenceAssignmentSection(sequences, assignments, txid) {
+  const contentEl = document.getElementById('sequence-assignment-content');
+  if (!contentEl) return;
+  
+  if (sequences.length === 0) {
+    contentEl.innerHTML = `
+      <p>No sequences available. <button id="create-sequence-from-panel" class="inline-btn">Create one</button></p>
+    `;
+    
+    // Add event listener for create button
+    const createBtn = document.getElementById('create-sequence-from-panel');
+    if (createBtn) {
+      createBtn.addEventListener('click', () => {
+        // Trigger the sequences modal
+        if (window.SequencesModule) {
+          document.getElementById('sequences-btn').click();
+        }
+      });
+    }
+    return;
+  }
+  
+  // Group assignments by sequence
+  const assignmentMap = {};
+  assignments.forEach(assignment => {
+    assignmentMap[assignment.sequence_id] = assignment;
+  });
+  
+  contentEl.innerHTML = `
+    <div class="sequence-assignment-form">
+      <div class="form-group">
+        <label for="sequence-select">Sequence</label>
+        <select id="sequence-select">
+          <option value="">Select a sequence...</option>
+          ${sequences.map(seq => `<option value="${seq.id}">${seq.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="jump-number">Jump Number</label>
+        <input type="number" id="jump-number" min="1" value="1">
+      </div>
+      <div class="form-group">
+        <label for="sequence-notes">Notes (optional)</label>
+        <textarea id="sequence-notes" rows="2"></textarea>
+      </div>
+      <button id="assign-sequence-btn" class="assign-btn">Assign to Sequence</button>
+    </div>
+    
+    ${assignments.length > 0 ? `
+      <div class="current-assignments">
+        <h5>Current Assignments</h5>
+        <ul class="assignments-list">
+          ${assignments.map(assignment => `
+            <li class="assignment-item">
+              <span class="assignment-sequence">${assignment.sequence_name}</span>
+              <span class="assignment-jump">#${assignment.jump_number}</span>
+              ${assignment.notes ? `<span class="assignment-notes">${assignment.notes}</span>` : ''}
+              <button class="unassign-btn" data-jump-id="${assignment.jump_id}">Unassign</button>
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+    ` : '<p class="no-assignments">Not assigned to any sequences</p>'}
+  `;
+  
+  // Add event listener for assign button
+  const assignBtn = document.getElementById('assign-sequence-btn');
+  if (assignBtn) {
+    assignBtn.addEventListener('click', () => {
+      const sequenceSelect = document.getElementById('sequence-select');
+      const jumpNumberInput = document.getElementById('jump-number');
+      const notesInput = document.getElementById('sequence-notes');
+      
+      const sequenceId = sequenceSelect.value;
+      const jumpNumber = jumpNumberInput.value;
+      const notes = notesInput.value;
+      
+      if (!sequenceId) {
+        alert('Please select a sequence');
+        return;
+      }
+      
+      if (!jumpNumber || jumpNumber < 1) {
+        alert('Please enter a valid jump number (≥ 1)');
+        return;
+      }
+      
+      document.dispatchEvent(new CustomEvent('sequences:assign', {
+        detail: {
+          sequence_id: parseInt(sequenceId),
+          txid: txid,
+          jump_number: parseInt(jumpNumber),
+          notes: notes
+        }
+      }));
+    });
+  }
+  
+  // Add event listeners for unassign buttons
+  contentEl.querySelectorAll('.unassign-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const jumpId = e.target.dataset.jumpId;
+      document.dispatchEvent(new CustomEvent('sequences:unassign', {
+        detail: {
+          jump_id: parseInt(jumpId)
+        }
+      }));
+    });
+  });
+}
  */
 PanelModule.hide = function() {
   const panel = document.getElementById('side-panel');
